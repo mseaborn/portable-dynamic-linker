@@ -35,7 +35,7 @@ void *plt_trampoline;
 
 struct prog_header prog_header = {
   .plt_trampoline = &plt_trampoline,
-  .pltgot = &pltgot_imports,
+  .pltgot = pltgot_imports,
   .user_info = function_table,
 };
 
