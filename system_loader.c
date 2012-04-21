@@ -5,6 +5,7 @@
 */
 
 #define _GNU_SOURCE
+#include <assert.h>
 #include <elf.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -12,6 +13,7 @@
 #include <link.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <sys/uio.h>
@@ -175,6 +177,15 @@ static void handle_bss(const char *file,
   }
 }
 
+ElfW(Word) get_dynamic_entry(ElfW(Dyn) *dynamic, int field) {
+  for (; dynamic->d_tag != DT_NULL; dynamic++) {
+    if (dynamic->d_tag == field) {
+      return dynamic->d_un.d_val;
+    }
+  }
+  assert(0);
+}
+
 /*
  * Open an ELF file and load it into memory.
  */
@@ -321,6 +332,32 @@ static ElfW(Addr) load_elf_file(const char *filename,
     }
   }
 
+  /* Find PT_DYNAMIC header. */
+  ElfW(Dyn) *dynamic = NULL;
+  for (i = 0; i < ehdr.e_phnum; ++i) {
+    if (phdr[i].p_type == PT_DYNAMIC) {
+      assert(dynamic == NULL);
+      dynamic = (ElfW(Dyn) *) (load_bias + phdr[i].p_vaddr);
+    }
+  }
+  assert(dynamic != NULL);
+
+  printf("load base: %x\n", load_bias);
+  ElfW(Rel) *relocs = (ElfW(Rel) *) (load_bias +
+                                     get_dynamic_entry(dynamic, DT_REL));
+  size_t relocs_size = get_dynamic_entry(dynamic, DT_RELSZ);
+  for (i = 0; i < relocs_size / sizeof(ElfW(Rel)); i++) {
+    ElfW(Rel) *reloc = &relocs[i];
+    int reloc_type = ELF32_R_TYPE(reloc->r_info);
+    printf("reloc %i: %x\n", reloc_type, reloc->r_offset);
+    if (reloc_type == R_386_RELATIVE) {
+      uint32_t *addr = (uint32_t *) (load_bias + reloc->r_offset);
+      *addr += load_bias;
+    } else {
+      assert(0);
+    }
+  }
+
   close(fd);
 
   if (out_phdr != NULL)
@@ -332,16 +369,20 @@ static ElfW(Addr) load_elf_file(const char *filename,
   return ehdr.e_entry + load_bias;
 }
 
-
-#include <stdio.h>
-
 int main() {
   size_t pagesize = 0x1000;
   uintptr_t entry = load_elf_file("example_lib.so", pagesize, NULL, NULL, NULL);
   printf("entry point: %p\n", (void *) entry);
 
+  void **function_table = (void **) entry;
+
   const char *(*func)(void);
-  func = (const char *(*)(void)) entry;
+  func = (const char *(*)(void)) function_table[0];
+  printf("function: %p\n", (void *) func);
+  printf("result: '%s'\n", func());
+
+  func = (const char *(*)(void)) function_table[1];
+  printf("function: %p\n", (void *) func);
   printf("result: '%s'\n", func());
 
   return 0;
