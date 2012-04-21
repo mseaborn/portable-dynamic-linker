@@ -19,6 +19,8 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
+#include "shared.h"
+
 #define MAX_PHNUM               12
 
 
@@ -369,12 +371,17 @@ static ElfW(Addr) load_elf_file(const char *filename,
   return ehdr.e_entry + load_bias;
 }
 
+const char *example_import() {
+  return "called imported func";
+}
+
 int main() {
   size_t pagesize = 0x1000;
   uintptr_t entry = load_elf_file("example_lib.so", pagesize, NULL, NULL, NULL);
   printf("entry point: %p\n", (void *) entry);
 
-  void **function_table = (void **) entry;
+  struct prog_header *prog_header = (struct prog_header *) entry;
+  void **function_table = prog_header->user_info;
 
   const char *(*func)(void);
   func = (const char *(*)(void)) function_table[0];
@@ -382,6 +389,11 @@ int main() {
   printf("result: '%s'\n", func());
 
   func = (const char *(*)(void)) function_table[1];
+  printf("function: %p\n", (void *) func);
+  printf("result: '%s'\n", func());
+
+  prog_header->pltgot[0] = (void *) example_import;
+  func = (const char *(*)(void)) function_table[2];
   printf("function: %p\n", (void *) func);
   printf("result: '%s'\n", func());
 
