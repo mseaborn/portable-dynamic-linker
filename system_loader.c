@@ -375,13 +375,22 @@ const char *example_import() {
   return "called imported func";
 }
 
+struct prog_header *g_prog_header;
+
+/* TODO: Handle arguments. */
+const char *plt_resolver() {
+  printf("resolver called!\n");
+  g_prog_header->pltgot[0] = (void *) example_import;
+  return example_import();
+}
+
 int main() {
   size_t pagesize = 0x1000;
   uintptr_t entry = load_elf_file("example_lib.so", pagesize, NULL, NULL, NULL);
   printf("entry point: %p\n", (void *) entry);
 
-  struct prog_header *prog_header = (struct prog_header *) entry;
-  void **function_table = prog_header->user_info;
+  g_prog_header = (struct prog_header *) entry;
+  void **function_table = g_prog_header->user_info;
 
   const char *(*func)(void);
   func = (const char *(*)(void)) function_table[0];
@@ -392,9 +401,10 @@ int main() {
   printf("function: %p\n", (void *) func);
   printf("result: '%s'\n", func());
 
-  prog_header->pltgot[0] = (void *) example_import;
+  *g_prog_header->plt_resolver = (void *) plt_resolver;
   func = (const char *(*)(void)) function_table[2];
   printf("function: %p\n", (void *) func);
+  printf("result: '%s'\n", func());
   printf("result: '%s'\n", func());
 
   return 0;

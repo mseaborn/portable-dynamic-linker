@@ -13,8 +13,14 @@ const char *bar() {
    therefore don't work as address-taken functions.  The address-taken
    version should be read from the GOT instead. */
 const char *import_func();
-void *pltgot_import_func;
-asm("import_func: jmp *pltgot_import_func@GOTOFF(%ebx)");
+void *slowpath_import_func();
+void *pltgot_import_func = slowpath_import_func;
+asm(".pushsection \".text\",\"ax\",@progbits\n"
+    "import_func:\n"
+    "jmp *pltgot_import_func@GOTOFF(%ebx)\n"
+    "slowpath_import_func:\n"
+    "jmp *plt_resolver@GOTOFF(%ebx)\n"
+    ".popsection\n");
 
 const char *qux() {
   return import_func();
@@ -26,7 +32,10 @@ void *function_table[] = {
   (void *) qux,
 };
 
+void *plt_resolver;
+
 struct prog_header prog_header = {
+  .plt_resolver = &plt_resolver,
   .pltgot = &pltgot_import_func,
   .user_info = function_table,
 };
