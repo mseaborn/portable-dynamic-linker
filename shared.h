@@ -2,9 +2,13 @@
 #ifndef SHARED_H_
 #define SHARED_H_
 
+typedef void *(*user_plt_resolver_t)(struct prog_header *prog_header,
+                                     int import_id);
+
 struct prog_header {
   void **plt_trampoline;
   void **pltgot;
+  user_plt_resolver_t user_plt_resolver;
   void *user_info;
 };
 
@@ -44,5 +48,7 @@ extern void *pltgot_imports[];
       "pltgot_" #name ":\n" \
       ".long slowpath_" #name "\n" \
       ".popsection\n");
+
+struct prog_header *load_from_elf_file(const char *filename);
 
 #endif

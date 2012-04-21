@@ -371,14 +371,6 @@ static ElfW(Addr) load_elf_file(const char *filename,
   return ehdr.e_entry + load_bias;
 }
 
-const char *example_import0() {
-  return "called imported func #0";
-}
-
-const char *example_import1() {
-  return "called imported func #1";
-}
-
 void plt_trampoline();
 /* A more sophisticated version would save and restore registers, in
    case the function called through the PLT passes arguments in
@@ -390,42 +382,17 @@ asm(".pushsection \".text\",\"ax\",@progbits\n"
     "jmp *%eax\n"
     ".popsection\n");
 
-void *plt_resolver(struct prog_header *prog_header, int import_id) {
-  printf("resolver called for func #%i!\n", import_id);
-  void *funcs[] = {
-    (void *) example_import0,
-    (void *) example_import1,
-  };
-  prog_header->pltgot[import_id] = funcs[import_id];
-  return funcs[import_id];
+static void *plt_resolver(struct prog_header *prog_header, int import_id) {
+  /* This could be inlined into the assembly code above, but that
+     would require putting knowledge of the struct layout into the
+     assembly code. */
+  return prog_header->user_plt_resolver(prog_header, import_id);
 }
 
-int main() {
+struct prog_header *load_from_elf_file(const char *filename) {
   size_t pagesize = 0x1000;
-  uintptr_t entry = load_elf_file("example_lib.so", pagesize, NULL, NULL, NULL);
-  printf("entry point: %p\n", (void *) entry);
-
+  uintptr_t entry = load_elf_file(filename, pagesize, NULL, NULL, NULL);
   struct prog_header *prog_header = (struct prog_header *) entry;
-  void **function_table = prog_header->user_info;
-
-  const char *(*func)(void);
-  func = (const char *(*)(void)) function_table[0];
-  printf("function: %p\n", (void *) func);
-  printf("result: '%s'\n", func());
-
-  func = (const char *(*)(void)) function_table[1];
-  printf("function: %p\n", (void *) func);
-  printf("result: '%s'\n", func());
-
   *prog_header->plt_trampoline = (void *) plt_trampoline;
-  func = (const char *(*)(void)) function_table[2];
-  printf("function: %p\n", (void *) func);
-  printf("result: '%s'\n", func());
-  printf("result: '%s'\n", func());
-  func = (const char *(*)(void)) function_table[3];
-  printf("function: %p\n", (void *) func);
-  printf("result: '%s'\n", func());
-  printf("result: '%s'\n", func());
-
-  return 0;
+  return prog_header;
 }
