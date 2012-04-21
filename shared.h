@@ -3,7 +3,7 @@
 #define SHARED_H_
 
 struct prog_header {
-  void **plt_resolver;
+  void **plt_trampoline;
   void **pltgot;
   void *user_info;
 };

@@ -12,30 +12,48 @@ const char *bar() {
 /* PLT entries assume that %ebx is set up on entry on x86-32.  They
    therefore don't work as address-taken functions.  The address-taken
    version should be read from the GOT instead. */
-const char *import_func();
-void *slowpath_import_func();
-void *pltgot_import_func = slowpath_import_func;
+const char *import_func0();
+const char *import_func1();
+void *slowpath_import_func0();
+void *slowpath_import_func1();
+void *pltgot_imports[] = {
+  slowpath_import_func0,
+  slowpath_import_func1,
+};
 asm(".pushsection \".text\",\"ax\",@progbits\n"
-    "import_func:\n"
-    "jmp *pltgot_import_func@GOTOFF(%ebx)\n"
-    "slowpath_import_func:\n"
-    "jmp *plt_resolver@GOTOFF(%ebx)\n"
+    "import_func0:\n"
+    "jmp *pltgot_imports@GOTOFF(%ebx)\n"
+    "slowpath_import_func0:\n"
+    "push $0\n"
+    "jmp *plt_trampoline@GOTOFF(%ebx)\n"
+    ".popsection\n");
+asm(".pushsection \".text\",\"ax\",@progbits\n"
+    "import_func1:\n"
+    "jmp *pltgot_imports+4@GOTOFF(%ebx)\n"
+    "slowpath_import_func1:\n"
+    "push $1\n"
+    "jmp *plt_trampoline@GOTOFF(%ebx)\n"
     ".popsection\n");
 
-const char *qux() {
-  return import_func();
+const char *test_import0() {
+  return import_func0();
+}
+
+const char *test_import1() {
+  return import_func1();
 }
 
 void *function_table[] = {
   (void *) foo,
   (void *) bar,
-  (void *) qux,
+  (void *) test_import0,
+  (void *) test_import1,
 };
 
-void *plt_resolver;
+void *plt_trampoline;
 
 struct prog_header prog_header = {
-  .plt_resolver = &plt_resolver,
-  .pltgot = &pltgot_import_func,
+  .plt_trampoline = &plt_trampoline,
+  .pltgot = &pltgot_imports,
   .user_info = function_table,
 };

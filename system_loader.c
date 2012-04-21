@@ -371,17 +371,35 @@ static ElfW(Addr) load_elf_file(const char *filename,
   return ehdr.e_entry + load_bias;
 }
 
-const char *example_import() {
-  return "called imported func";
+const char *example_import0() {
+  return "called imported func #0";
+}
+
+const char *example_import1() {
+  return "called imported func #1";
 }
 
 struct prog_header *g_prog_header;
 
-/* TODO: Handle arguments. */
-const char *plt_resolver() {
-  printf("resolver called!\n");
-  g_prog_header->pltgot[0] = (void *) example_import;
-  return example_import();
+void plt_trampoline();
+/* A more sophisticated version would save and restore registers, in
+   case the function called through the PLT passes arguments in
+   registers. */
+asm(".pushsection \".text\",\"ax\",@progbits\n"
+    "plt_trampoline:\n"
+    "call plt_resolver\n"
+    "add $4, %esp\n" /* Drop arguments */
+    "jmp *%eax\n"
+    ".popsection\n");
+
+void *plt_resolver(int import_id) {
+  printf("resolver called for func #%i!\n", import_id);
+  void *funcs[] = {
+    (void *) example_import0,
+    (void *) example_import1,
+  };
+  g_prog_header->pltgot[import_id] = funcs[import_id];
+  return funcs[import_id];
 }
 
 int main() {
@@ -401,8 +419,12 @@ int main() {
   printf("function: %p\n", (void *) func);
   printf("result: '%s'\n", func());
 
-  *g_prog_header->plt_resolver = (void *) plt_resolver;
+  *g_prog_header->plt_trampoline = (void *) plt_trampoline;
   func = (const char *(*)(void)) function_table[2];
+  printf("function: %p\n", (void *) func);
+  printf("result: '%s'\n", func());
+  printf("result: '%s'\n", func());
+  func = (const char *(*)(void)) function_table[3];
   printf("function: %p\n", (void *) func);
   printf("result: '%s'\n", func());
   printf("result: '%s'\n", func());
