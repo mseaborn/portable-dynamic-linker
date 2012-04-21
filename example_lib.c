@@ -21,18 +21,23 @@ void *pltgot_imports[] = {
   slowpath_import_func1,
 };
 asm(".pushsection \".text\",\"ax\",@progbits\n"
+    "slowpath_common:\n"
+    "push plt_handle@GOTOFF(%ebx)\n"
+    "jmp *plt_trampoline@GOTOFF(%ebx)\n"
+    ".popsection\n");
+asm(".pushsection \".text\",\"ax\",@progbits\n"
     "import_func0:\n"
     "jmp *pltgot_imports@GOTOFF(%ebx)\n"
     "slowpath_import_func0:\n"
     "push $0\n"
-    "jmp *plt_trampoline@GOTOFF(%ebx)\n"
+    "jmp slowpath_common\n"
     ".popsection\n");
 asm(".pushsection \".text\",\"ax\",@progbits\n"
     "import_func1:\n"
     "jmp *pltgot_imports+4@GOTOFF(%ebx)\n"
     "slowpath_import_func1:\n"
     "push $1\n"
-    "jmp *plt_trampoline@GOTOFF(%ebx)\n"
+    "jmp slowpath_common\n"
     ".popsection\n");
 
 const char *test_import0() {
@@ -57,3 +62,5 @@ struct prog_header prog_header = {
   .pltgot = &pltgot_imports,
   .user_info = function_table,
 };
+
+struct prog_header *plt_handle = &prog_header;

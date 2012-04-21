@@ -379,8 +379,6 @@ const char *example_import1() {
   return "called imported func #1";
 }
 
-struct prog_header *g_prog_header;
-
 void plt_trampoline();
 /* A more sophisticated version would save and restore registers, in
    case the function called through the PLT passes arguments in
@@ -388,17 +386,17 @@ void plt_trampoline();
 asm(".pushsection \".text\",\"ax\",@progbits\n"
     "plt_trampoline:\n"
     "call plt_resolver\n"
-    "add $4, %esp\n" /* Drop arguments */
+    "add $8, %esp\n" /* Drop arguments */
     "jmp *%eax\n"
     ".popsection\n");
 
-void *plt_resolver(int import_id) {
+void *plt_resolver(struct prog_header *prog_header, int import_id) {
   printf("resolver called for func #%i!\n", import_id);
   void *funcs[] = {
     (void *) example_import0,
     (void *) example_import1,
   };
-  g_prog_header->pltgot[import_id] = funcs[import_id];
+  prog_header->pltgot[import_id] = funcs[import_id];
   return funcs[import_id];
 }
 
@@ -407,8 +405,8 @@ int main() {
   uintptr_t entry = load_elf_file("example_lib.so", pagesize, NULL, NULL, NULL);
   printf("entry point: %p\n", (void *) entry);
 
-  g_prog_header = (struct prog_header *) entry;
-  void **function_table = g_prog_header->user_info;
+  struct prog_header *prog_header = (struct prog_header *) entry;
+  void **function_table = prog_header->user_info;
 
   const char *(*func)(void);
   func = (const char *(*)(void)) function_table[0];
@@ -419,7 +417,7 @@ int main() {
   printf("function: %p\n", (void *) func);
   printf("result: '%s'\n", func());
 
-  *g_prog_header->plt_trampoline = (void *) plt_trampoline;
+  *prog_header->plt_trampoline = (void *) plt_trampoline;
   func = (const char *(*)(void)) function_table[2];
   printf("function: %p\n", (void *) func);
   printf("result: '%s'\n", func());
