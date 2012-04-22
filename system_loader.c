@@ -344,14 +344,12 @@ static ElfW(Addr) load_elf_file(const char *filename,
   }
   assert(dynamic != NULL);
 
-  printf("load base: %x\n", load_bias);
   ElfW(Rel) *relocs = (ElfW(Rel) *) (load_bias +
                                      get_dynamic_entry(dynamic, DT_REL));
   size_t relocs_size = get_dynamic_entry(dynamic, DT_RELSZ);
   for (i = 0; i < relocs_size / sizeof(ElfW(Rel)); i++) {
     ElfW(Rel) *reloc = &relocs[i];
     int reloc_type = ELF32_R_TYPE(reloc->r_info);
-    printf("reloc %i: %x\n", reloc_type, reloc->r_offset);
     if (reloc_type == R_386_RELATIVE) {
       uint32_t *addr = (uint32_t *) (load_bias + reloc->r_offset);
       *addr += load_bias;

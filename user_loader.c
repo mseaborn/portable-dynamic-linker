@@ -29,21 +29,17 @@ int main() {
 
   const char *(*func)(void);
   func = (const char *(*)(void)) function_table[0];
-  printf("function: %p\n", (void *) func);
   printf("result: '%s'\n", func());
 
   func = (const char *(*)(void)) function_table[1];
-  printf("function: %p\n", (void *) func);
   printf("result: '%s'\n", func());
 
   prog_header->user_plt_resolver = my_plt_resolver;
 
   func = (const char *(*)(void)) function_table[2];
-  printf("function: %p\n", (void *) func);
   printf("result: '%s'\n", func());
   printf("result: '%s'\n", func());
   func = (const char *(*)(void)) function_table[3];
-  printf("function: %p\n", (void *) func);
   printf("result: '%s'\n", func());
   printf("result: '%s'\n", func());
 
