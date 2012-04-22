@@ -31,12 +31,4 @@ void *function_table[] = {
   (void *) test_import1,
 };
 
-void *plt_trampoline;
-
-struct prog_header prog_header = {
-  .plt_trampoline = &plt_trampoline,
-  .pltgot = pltgot_imports,
-  .user_info = function_table,
-};
-
-struct prog_header *plt_handle = &prog_header;
+DEFINE_HEADER(function_table);

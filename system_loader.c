@@ -377,12 +377,12 @@ void plt_trampoline();
    registers. */
 asm(".pushsection \".text\",\"ax\",@progbits\n"
     "plt_trampoline:\n"
-    "call plt_resolver\n"
+    "call system_plt_resolver\n"
     "add $8, %esp\n" /* Drop arguments */
     "jmp *%eax\n"
     ".popsection\n");
 
-static void *plt_resolver(struct prog_header *prog_header, int import_id) {
+void *system_plt_resolver(struct prog_header *prog_header, int import_id) {
   /* This could be inlined into the assembly code above, but that
      would require putting knowledge of the struct layout into the
      assembly code. */
