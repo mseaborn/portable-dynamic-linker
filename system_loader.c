@@ -344,6 +344,7 @@ static ElfW(Addr) load_elf_file(const char *filename,
   }
   assert(dynamic != NULL);
 
+#if defined(__i386__)
   ElfW(Rel) *relocs = (ElfW(Rel) *) (load_bias +
                                      get_dynamic_entry(dynamic, DT_REL));
   size_t relocs_size = get_dynamic_entry(dynamic, DT_RELSZ);
@@ -357,6 +358,21 @@ static ElfW(Addr) load_elf_file(const char *filename,
       assert(0);
     }
   }
+#elif defined(__x86_64__)
+  ElfW(Rela) *relocs = (ElfW(Rela) *) (load_bias +
+                                       get_dynamic_entry(dynamic, DT_RELA));
+  size_t relocs_size = get_dynamic_entry(dynamic, DT_RELASZ);
+  for (i = 0; i < relocs_size / sizeof(ElfW(Rela)); i++) {
+    ElfW(Rela) *reloc = &relocs[i];
+    int reloc_type = ELF64_R_TYPE(reloc->r_info);
+    if (reloc_type == R_X86_64_RELATIVE) {
+      uint64_t *addr = (uint64_t *) (load_bias + reloc->r_offset);
+      *addr += load_bias;
+    } else {
+      assert(0);
+    }
+  }
+#endif
 
   close(fd);
 
@@ -370,6 +386,7 @@ static ElfW(Addr) load_elf_file(const char *filename,
 }
 
 void plt_trampoline();
+#if defined(__i386__)
 /* A more sophisticated version would save and restore registers, in
    case the function called through the PLT passes arguments in
    registers. */
@@ -379,6 +396,17 @@ asm(".pushsection \".text\",\"ax\",@progbits\n"
     "add $8, %esp\n" /* Drop arguments */
     "jmp *%eax\n"
     ".popsection\n");
+#elif defined(__x86_64__)
+asm(".pushsection \".text\",\"ax\",@progbits\n"
+    "plt_trampoline:\n"
+    "pop %rdi\n" /* Argument 1 */
+    "pop %rsi\n" /* Argument 2 */
+    "call system_plt_resolver\n"
+    "jmp *%rax\n"
+    ".popsection\n");
+#else
+# error Unsupported architecture
+#endif
 
 void *system_plt_resolver(struct prog_header *prog_header, int import_id) {
   /* This could be inlined into the assembly code above, but that

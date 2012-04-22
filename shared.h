@@ -20,7 +20,9 @@ struct prog_header {
 
 extern void *pltgot_imports[];
 
-#define PLT_BEGIN \
+#if defined(__i386__)
+
+# define PLT_BEGIN \
   asm(".pushsection \".text\",\"ax\",@progbits\n" \
       "slowpath_common:\n" \
       "push plt_handle@GOTOFF(%ebx)\n" \
@@ -37,7 +39,7 @@ extern void *pltgot_imports[];
 /* To consider: In x86-32 ELF, the argument pushed by the slow path is
    an offset (a multiple of 8) rather than an index.  But in x86-64
    ELF, the argument pushed is an index.  We use an index below. */
-#define PLT_ENTRY(number, name) \
+# define PLT_ENTRY(number, name) \
   asm(".pushsection \".text\",\"ax\",@progbits\n" \
       #name ":\n" \
       "jmp *pltgot_" #name "@GOTOFF(%ebx)\n" \
@@ -50,6 +52,37 @@ extern void *pltgot_imports[];
       "pltgot_" #name ":\n" \
       ".long slowpath_" #name "\n" \
       ".popsection\n");
+
+#elif defined(__x86_64__)
+
+# define PLT_BEGIN \
+  asm(".pushsection \".text\",\"ax\",@progbits\n" \
+      "slowpath_common:\n" \
+      "pushq plt_handle(%rip)\n" \
+      "jmp *plt_trampoline(%rip)\n" \
+      ".popsection\n" \
+      /* Start of PLTGOT table. */ \
+      ".pushsection \".my_pltgot\",\"aw\",@progbits\n" \
+      "pltgot_imports:\n" \
+      ".popsection\n");
+
+# define PLT_ENTRY(number, name) \
+  asm(".pushsection \".text\",\"ax\",@progbits\n" \
+      #name ":\n" \
+      "jmp *pltgot_" #name "(%rip)\n" \
+      "slowpath_" #name ":\n" \
+      "pushq $" #number "\n" \
+      "jmp slowpath_common\n" \
+      ".popsection\n" \
+      /* Entry in PLTGOT table */ \
+      ".pushsection \".my_pltgot\",\"aw\",@progbits\n" \
+      "pltgot_" #name ":\n" \
+      ".quad slowpath_" #name "\n" \
+      ".popsection\n");
+
+#else
+# error Unsupported architecture
+#endif
 
 #define DEFINE_HEADER(user_info_value) \
   void *plt_trampoline; \
