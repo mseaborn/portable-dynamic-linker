@@ -434,14 +434,14 @@ struct dynnacl_obj *dynnacl_load_from_elf_file(const char *filename) {
 }
 
 void *dynnacl_get_user_root(struct dynnacl_obj *dynnacl_obj) {
-  struct prog_header *prog_header = dynnacl_obj->entry;
+  struct dynnacl_prog_header *prog_header = dynnacl_obj->entry;
   return prog_header->user_info;
 }
 
 void dynnacl_set_plt_resolver(struct dynnacl_obj *dynnacl_obj,
                               user_plt_resolver_t plt_resolver,
                               void *handle) {
-  struct prog_header *prog_header = dynnacl_obj->entry;
+  struct dynnacl_prog_header *prog_header = dynnacl_obj->entry;
   *prog_header->plt_trampoline = (void *) plt_trampoline;
   *prog_header->plt_handle = dynnacl_obj;
   dynnacl_obj->user_plt_resolver = plt_resolver;
@@ -450,6 +450,6 @@ void dynnacl_set_plt_resolver(struct dynnacl_obj *dynnacl_obj,
 
 void dynnacl_set_plt_entry(struct dynnacl_obj *dynnacl_obj,
                            int import_id, void *func) {
-  struct prog_header *prog_header = dynnacl_obj->entry;
+  struct dynnacl_prog_header *prog_header = dynnacl_obj->entry;
   prog_header->pltgot[import_id] = func;
 }

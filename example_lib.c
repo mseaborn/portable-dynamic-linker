@@ -12,9 +12,9 @@ const char *bar() {
 const char *import_func0();
 const char *import_func1();
 
-PLT_BEGIN;
-PLT_ENTRY(0, import_func0);
-PLT_ENTRY(1, import_func1);
+DYNNACL_PLT_BEGIN;
+DYNNACL_PLT_ENTRY(0, import_func0);
+DYNNACL_PLT_ENTRY(1, import_func1);
 
 const char *test_import0() {
   return import_func0();
@@ -31,4 +31,4 @@ void *function_table[] = {
   (void *) test_import1,
 };
 
-DEFINE_HEADER(function_table);
+DYNNACL_DEFINE_HEADER(function_table);

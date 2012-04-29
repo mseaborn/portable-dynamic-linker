@@ -2,11 +2,11 @@
 #ifndef SHARED_H_
 #define SHARED_H_
 
-struct prog_header;
+struct dynnacl_prog_header;
 
 typedef void *(*user_plt_resolver_t)(void *handle, int import_id);
 
-struct prog_header {
+struct dynnacl_prog_header {
   void **plt_trampoline;
   void **plt_handle;
   void **pltgot;
@@ -21,7 +21,7 @@ extern void *pltgot_imports[];
 
 #if defined(__i386__)
 
-# define PLT_BEGIN \
+# define DYNNACL_PLT_BEGIN \
   asm(".pushsection \".text\",\"ax\",@progbits\n" \
       "slowpath_common:\n" \
       "push plt_handle@GOTOFF(%ebx)\n" \
@@ -38,7 +38,7 @@ extern void *pltgot_imports[];
 /* To consider: In x86-32 ELF, the argument pushed by the slow path is
    an offset (a multiple of 8) rather than an index.  But in x86-64
    ELF, the argument pushed is an index.  We use an index below. */
-# define PLT_ENTRY(number, name) \
+# define DYNNACL_PLT_ENTRY(number, name) \
   asm(".pushsection \".text\",\"ax\",@progbits\n" \
       #name ":\n" \
       "jmp *pltgot_" #name "@GOTOFF(%ebx)\n" \
@@ -54,7 +54,7 @@ extern void *pltgot_imports[];
 
 #elif defined(__x86_64__)
 
-# define PLT_BEGIN \
+# define DYNNACL_PLT_BEGIN \
   asm(".pushsection \".text\",\"ax\",@progbits\n" \
       "slowpath_common:\n" \
       "pushq plt_handle(%rip)\n" \
@@ -65,7 +65,7 @@ extern void *pltgot_imports[];
       "pltgot_imports:\n" \
       ".popsection\n");
 
-# define PLT_ENTRY(number, name) \
+# define DYNNACL_PLT_ENTRY(number, name) \
   asm(".pushsection \".text\",\"ax\",@progbits\n" \
       #name ":\n" \
       "jmp *pltgot_" #name "(%rip)\n" \
@@ -83,10 +83,10 @@ extern void *pltgot_imports[];
 # error Unsupported architecture
 #endif
 
-#define DEFINE_HEADER(user_info_value) \
+#define DYNNACL_DEFINE_HEADER(user_info_value) \
   void *plt_trampoline; \
   void *plt_handle; \
-  struct prog_header prog_header = { \
+  struct dynnacl_prog_header prog_header = { \
     .plt_trampoline = &plt_trampoline, \
     .plt_handle = &plt_handle, \
     .pltgot = pltgot_imports, \
