@@ -34,7 +34,7 @@ void *my_plt_resolver(void *handle, int import_id) {
 
 int main() {
   struct dynnacl_obj *dynnacl_obj =
-    dynnacl_load_from_elf_file("example_lib.so");
+    dynnacl_load_from_elf_file("example_lib_min.so");
 
   void **function_table = dynnacl_get_user_root(dynnacl_obj);
 
