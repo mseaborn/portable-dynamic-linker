@@ -30,6 +30,20 @@ struct dynnacl_obj {
   void *user_plt_resolver_handle;
 };
 
+#if defined(__i386__)
+typedef ElfW(Rel) ElfW_Reloc;
+# define ELFW_R_TYPE(x) ELF32_R_TYPE(x)
+# define ELFW_DT_RELW DT_REL
+# define ELFW_DT_RELWSZ DT_RELSZ
+#elif defined(__x86_64__)
+typedef ElfW(Rela) ElfW_Reloc;
+# define ELFW_R_TYPE(x) ELF64_R_TYPE(x)
+# define ELFW_DT_RELW DT_RELA
+# define ELFW_DT_RELWSZ DT_RELASZ
+#else
+# error Unsupported architecture
+#endif
+
 
 /*
  * We're not using <string.h> functions here, to avoid dependencies.
@@ -351,35 +365,28 @@ struct dynnacl_obj *load_elf_file(const char *filename,
   }
   assert(dynamic != NULL);
 
+  ElfW_Reloc *relocs =
+    (ElfW_Reloc *) (load_bias +
+                    get_dynamic_entry(dynamic, ELFW_DT_RELW));
+  size_t relocs_size = get_dynamic_entry(dynamic, ELFW_DT_RELWSZ);
+  for (i = 0; i < relocs_size / sizeof(ElfW_Reloc); i++) {
+    ElfW_Reloc *reloc = &relocs[i];
+    int reloc_type = ELFW_R_TYPE(reloc->r_info);
+    switch (reloc_type) {
 #if defined(__i386__)
-  ElfW(Rel) *relocs = (ElfW(Rel) *) (load_bias +
-                                     get_dynamic_entry(dynamic, DT_REL));
-  size_t relocs_size = get_dynamic_entry(dynamic, DT_RELSZ);
-  for (i = 0; i < relocs_size / sizeof(ElfW(Rel)); i++) {
-    ElfW(Rel) *reloc = &relocs[i];
-    int reloc_type = ELF32_R_TYPE(reloc->r_info);
-    if (reloc_type == R_386_RELATIVE) {
-      uint32_t *addr = (uint32_t *) (load_bias + reloc->r_offset);
-      *addr += load_bias;
-    } else {
-      assert(0);
-    }
-  }
+      case R_386_RELATIVE:
 #elif defined(__x86_64__)
-  ElfW(Rela) *relocs = (ElfW(Rela) *) (load_bias +
-                                       get_dynamic_entry(dynamic, DT_RELA));
-  size_t relocs_size = get_dynamic_entry(dynamic, DT_RELASZ);
-  for (i = 0; i < relocs_size / sizeof(ElfW(Rela)); i++) {
-    ElfW(Rela) *reloc = &relocs[i];
-    int reloc_type = ELF64_R_TYPE(reloc->r_info);
-    if (reloc_type == R_X86_64_RELATIVE) {
-      uint64_t *addr = (uint64_t *) (load_bias + reloc->r_offset);
-      *addr += load_bias;
-    } else {
+      case R_X86_64_RELATIVE:
+#endif
+        {
+          ElfW(Addr) *addr = (ElfW(Addr) *) (load_bias + reloc->r_offset);
+          *addr += load_bias;
+          break;
+        }
+    default:
       assert(0);
     }
   }
-#endif
 
   struct dynnacl_obj *dynnacl_obj = malloc(sizeof(dynnacl_obj));
   assert(dynnacl_obj != NULL);
