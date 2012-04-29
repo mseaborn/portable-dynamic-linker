@@ -24,6 +24,13 @@
 #define MAX_PHNUM               12
 
 
+struct dynnacl_obj {
+  void *entry;
+  user_plt_resolver_t user_plt_resolver;
+  void *user_plt_resolver_handle;
+};
+
+
 /*
  * We're not using <string.h> functions here, to avoid dependencies.
  * In the x86 libc, even "simple" functions like memset and strlen can
@@ -191,11 +198,11 @@ ElfW(Word) get_dynamic_entry(ElfW(Dyn) *dynamic, int field) {
 /*
  * Open an ELF file and load it into memory.
  */
-static ElfW(Addr) load_elf_file(const char *filename,
-                                size_t pagesize,
-                                ElfW(Addr) *out_phdr,
-                                ElfW(Addr) *out_phnum,
-                                const char **out_interp) {
+struct dynnacl_obj *load_elf_file(const char *filename,
+                                  size_t pagesize,
+                                  ElfW(Addr) *out_phdr,
+                                  ElfW(Addr) *out_phnum,
+                                  const char **out_interp) {
   int fd = my_open(filename, O_RDONLY);
 
   ElfW(Ehdr) ehdr;
@@ -374,6 +381,11 @@ static ElfW(Addr) load_elf_file(const char *filename,
   }
 #endif
 
+  struct dynnacl_obj *dynnacl_obj = malloc(sizeof(dynnacl_obj));
+  assert(dynnacl_obj != NULL);
+
+  dynnacl_obj->entry = (void *) (ehdr.e_entry + load_bias);
+
   close(fd);
 
   if (out_phdr != NULL)
@@ -382,7 +394,7 @@ static ElfW(Addr) load_elf_file(const char *filename,
   if (out_phnum != NULL)
     *out_phnum = ehdr.e_phnum;
 
-  return ehdr.e_entry + load_bias;
+  return dynnacl_obj;
 }
 
 void plt_trampoline();
@@ -408,17 +420,36 @@ asm(".pushsection \".text\",\"ax\",@progbits\n"
 # error Unsupported architecture
 #endif
 
-void *system_plt_resolver(struct prog_header *prog_header, int import_id) {
+void *system_plt_resolver(struct dynnacl_obj *dynnacl_obj, int import_id) {
   /* This could be inlined into the assembly code above, but that
      would require putting knowledge of the struct layout into the
      assembly code. */
-  return prog_header->user_plt_resolver(prog_header, import_id);
+  return dynnacl_obj->user_plt_resolver(dynnacl_obj->user_plt_resolver_handle,
+                                        import_id);
 }
 
-struct prog_header *load_from_elf_file(const char *filename) {
+struct dynnacl_obj *dynnacl_load_from_elf_file(const char *filename) {
   size_t pagesize = 0x1000;
-  uintptr_t entry = load_elf_file(filename, pagesize, NULL, NULL, NULL);
-  struct prog_header *prog_header = (struct prog_header *) entry;
+  return load_elf_file(filename, pagesize, NULL, NULL, NULL);
+}
+
+void *dynnacl_get_user_root(struct dynnacl_obj *dynnacl_obj) {
+  struct prog_header *prog_header = dynnacl_obj->entry;
+  return prog_header->user_info;
+}
+
+void dynnacl_set_plt_resolver(struct dynnacl_obj *dynnacl_obj,
+                              user_plt_resolver_t plt_resolver,
+                              void *handle) {
+  struct prog_header *prog_header = dynnacl_obj->entry;
   *prog_header->plt_trampoline = (void *) plt_trampoline;
-  return prog_header;
+  *prog_header->plt_handle = dynnacl_obj;
+  dynnacl_obj->user_plt_resolver = plt_resolver;
+  dynnacl_obj->user_plt_resolver_handle = handle;
+}
+
+void dynnacl_set_plt_entry(struct dynnacl_obj *dynnacl_obj,
+                           int import_id, void *func) {
+  struct prog_header *prog_header = dynnacl_obj->entry;
+  prog_header->pltgot[import_id] = func;
 }

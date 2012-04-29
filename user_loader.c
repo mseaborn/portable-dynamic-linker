@@ -17,7 +17,8 @@ const char *example_import1() {
 static int resolver_call_count = 0;
 static int resolver_last_id = -1;
 
-void *my_plt_resolver(struct prog_header *prog_header, int import_id) {
+void *my_plt_resolver(void *handle, int import_id) {
+  struct dynnacl_obj *dynnacl_obj = handle;
   printf("resolver called for func #%i!\n", import_id);
   resolver_call_count++;
   resolver_last_id = import_id;
@@ -26,14 +27,16 @@ void *my_plt_resolver(struct prog_header *prog_header, int import_id) {
     (void *) example_import0,
     (void *) example_import1,
   };
-  prog_header->pltgot[import_id] = funcs[import_id];
-  return funcs[import_id];
+  void *func = funcs[import_id];
+  dynnacl_set_plt_entry(dynnacl_obj, import_id, func);
+  return func;
 }
 
 int main() {
-  struct prog_header *prog_header = load_from_elf_file("example_lib.so");
+  struct dynnacl_obj *dynnacl_obj =
+    dynnacl_load_from_elf_file("example_lib.so");
 
-  void **function_table = prog_header->user_info;
+  void **function_table = dynnacl_get_user_root(dynnacl_obj);
 
   printf("testing exported functions...\n");
   const char *(*func)(void);
@@ -47,7 +50,7 @@ int main() {
   assert(strcmp(result, "another example string") == 0);
 
   printf("testing imported functions...\n");
-  prog_header->user_plt_resolver = my_plt_resolver;
+  dynnacl_set_plt_resolver(dynnacl_obj, my_plt_resolver, dynnacl_obj);
 
   func = (const char *(*)(void)) function_table[2];
   result = func();

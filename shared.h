@@ -4,13 +4,12 @@
 
 struct prog_header;
 
-typedef void *(*user_plt_resolver_t)(struct prog_header *prog_header,
-                                     int import_id);
+typedef void *(*user_plt_resolver_t)(void *handle, int import_id);
 
 struct prog_header {
   void **plt_trampoline;
+  void **plt_handle;
   void **pltgot;
-  user_plt_resolver_t user_plt_resolver;
   void *user_info;
 };
 
@@ -86,13 +85,23 @@ extern void *pltgot_imports[];
 
 #define DEFINE_HEADER(user_info_value) \
   void *plt_trampoline; \
+  void *plt_handle; \
   struct prog_header prog_header = { \
     .plt_trampoline = &plt_trampoline, \
+    .plt_handle = &plt_handle, \
     .pltgot = pltgot_imports, \
     .user_info = user_info_value, \
-  }; \
-  struct prog_header *plt_handle = &prog_header;
+  };
 
-struct prog_header *load_from_elf_file(const char *filename);
+struct dynnacl_obj;
+
+struct dynnacl_obj *dynnacl_load_from_elf_file(const char *filename);
+
+void *dynnacl_get_user_root(struct dynnacl_obj *dynnacl_obj);
+void dynnacl_set_plt_resolver(struct dynnacl_obj *dynnacl_obj,
+                              user_plt_resolver_t plt_resolver,
+                              void *handle);
+void dynnacl_set_plt_entry(struct dynnacl_obj *dynnacl_obj,
+                           int import_id, void *func);
 
 #endif

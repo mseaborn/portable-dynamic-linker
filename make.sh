@@ -3,7 +3,7 @@
 set -eux
 
 for bits in 32 64; do
-  flags="-m$bits -Wall -g"
+  flags="-m$bits -Wall -Werror -g"
   dir="out-$bits"
   mkdir -p $dir
   gcc $flags -fvisibility=hidden -shared -fPIC -c \
