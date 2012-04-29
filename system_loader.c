@@ -24,31 +24,34 @@
 #define MAX_PHNUM               12
 
 
+#if defined(__i386__)
+typedef ElfW(Rel) ElfW_Reloc;
+# define ELFW_R_TYPE(x) ELF32_R_TYPE(x)
+# define ELFW_R_SYM(x) ELF32_R_SYM(x)
+# define ELFW_DT_RELW DT_REL
+# define ELFW_DT_RELWSZ DT_RELSZ
+#elif defined(__x86_64__)
+typedef ElfW(Rela) ElfW_Reloc;
+# define ELFW_R_TYPE(x) ELF64_R_TYPE(x)
+# define ELFW_R_SYM(x) ELF64_R_SYM(x)
+# define ELFW_DT_RELW DT_RELA
+# define ELFW_DT_RELWSZ DT_RELASZ
+#else
+# error Unsupported architecture
+#endif
+
 struct dynnacl_obj {
   uintptr_t load_bias;
   void *entry;
   ElfW(Dyn) *pt_dynamic;
 
   void **dt_pltgot;
+  ElfW_Reloc *dt_jmprel;
   size_t plt_entries;
 
   user_plt_resolver_t user_plt_resolver;
   void *user_plt_resolver_handle;
 };
-
-#if defined(__i386__)
-typedef ElfW(Rel) ElfW_Reloc;
-# define ELFW_R_TYPE(x) ELF32_R_TYPE(x)
-# define ELFW_DT_RELW DT_REL
-# define ELFW_DT_RELWSZ DT_RELSZ
-#elif defined(__x86_64__)
-typedef ElfW(Rela) ElfW_Reloc;
-# define ELFW_R_TYPE(x) ELF64_R_TYPE(x)
-# define ELFW_DT_RELW DT_RELA
-# define ELFW_DT_RELWSZ DT_RELASZ
-#else
-# error Unsupported architecture
-#endif
 
 
 /*
@@ -404,8 +407,11 @@ struct dynnacl_obj *load_elf_file(const char *filename,
   dynnacl_obj->dt_pltgot = NULL;
   dynnacl_obj->plt_entries = 0;
   uintptr_t pltgot = get_dynamic_entry(dynamic, DT_PLTGOT);
-  if (pltgot != 0)
+  if (pltgot != 0) {
     dynnacl_obj->dt_pltgot = (void **) (pltgot + load_bias);
+    dynnacl_obj->dt_jmprel =
+      (ElfW_Reloc *) (get_dynamic_entry(dynamic, DT_JMPREL) + load_bias);
+  }
 
   close(fd);
 
@@ -422,14 +428,11 @@ static void init_lazy_pltgot(struct dynnacl_obj *dynnacl_obj) {
   /* Apply relocations */
   int rel_type = get_dynamic_entry(dynnacl_obj->pt_dynamic, DT_PLTREL);
   assert(rel_type == ELFW_DT_RELW);
-  ElfW_Reloc *relocs =
-    (ElfW_Reloc *) (dynnacl_obj->load_bias +
-                    get_dynamic_entry(dynnacl_obj->pt_dynamic, DT_JMPREL));
   size_t relocs_size = get_dynamic_entry(dynnacl_obj->pt_dynamic, DT_PLTRELSZ);
   size_t index;
   dynnacl_obj->plt_entries = relocs_size / sizeof(ElfW_Reloc);
   for (index = 0; index < dynnacl_obj->plt_entries; index++) {
-    ElfW_Reloc *reloc = &relocs[index];
+    ElfW_Reloc *reloc = &dynnacl_obj->dt_jmprel[index];
     int reloc_type = ELFW_R_TYPE(reloc->r_info);
 #if defined(__i386__)
     assert(reloc_type == R_386_JMP_SLOT);
@@ -528,4 +531,12 @@ void elf_set_plt_entry(struct dynnacl_obj *dynnacl_obj,
                        int import_id, void *func) {
   assert(import_id < dynnacl_obj->plt_entries);
   dynnacl_obj->dt_pltgot[3 + import_id] = func;
+}
+
+int elf_symbol_id_from_import_id(struct dynnacl_obj *dynnacl_obj,
+                                 int import_id) {
+  assert(import_id < dynnacl_obj->plt_entries);
+  /* This implementation needs to be on the system side because the
+     size of the relocation entry is architecture-specific. */
+  return ELFW_R_SYM(dynnacl_obj->dt_jmprel[import_id].r_info);
 }

@@ -113,5 +113,7 @@ void elf_set_plt_resolver(struct dynnacl_obj *dynnacl_obj,
                           void *handle);
 void elf_set_plt_entry(struct dynnacl_obj *dynnacl_obj,
                        int import_id, void *func);
+int elf_symbol_id_from_import_id(struct dynnacl_obj *dynnacl_obj,
+                                 int import_id);
 
 #endif
