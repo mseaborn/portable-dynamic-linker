@@ -69,6 +69,26 @@ static void *look_up_func(struct elf_obj *obj, const char *name) {
   return (void *) (elf_get_load_bias(obj->dynnacl_obj) + sym->st_value);
 }
 
+const char *example_import0() {
+  return "called imported func #0";
+}
+
+const char *example_import1() {
+  return "called imported func #1";
+}
+
+static int resolver_call_count = 0;
+
+static void *my_plt_resolver(void *handle, int import_id) {
+  struct elf_obj *elf_obj = handle;
+  printf("elf resolver called for func #%i!\n", import_id);
+  resolver_call_count++;
+
+  void *value = example_import0;
+  elf_set_plt_entry(elf_obj->dynnacl_obj, import_id, value);
+  return value;
+}
+
 int main() {
   struct dynnacl_obj *dynnacl_obj =
     dynnacl_load_from_elf_file("example_lib_elf.so");
@@ -98,6 +118,19 @@ int main() {
 
   void *sym = look_up_func(&elf_obj, "some_undefined_sym");
   assert(sym == NULL);
+
+  printf("testing imported functions...\n");
+  elf_set_plt_resolver(dynnacl_obj, my_plt_resolver, &elf_obj);
+
+  func = (const char *(*)(void)) look_up_func(&elf_obj, "test_import0");
+  assert(func != NULL);
+  result = func();
+  assert(strcmp(result, "called imported func #0") == 0);
+  assert(resolver_call_count == 1);
+  resolver_call_count = 0;
+  result = func();
+  assert(strcmp(result, "called imported func #0") == 0);
+  assert(resolver_call_count == 0);
 
   return 0;
 }

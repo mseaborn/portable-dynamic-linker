@@ -108,5 +108,10 @@ void dynnacl_set_plt_entry(struct dynnacl_obj *dynnacl_obj,
 
 uintptr_t elf_get_load_bias(struct dynnacl_obj *dynnacl_obj);
 uintptr_t elf_get_dynamic_entry(struct dynnacl_obj *dynnacl_obj, int type);
+void elf_set_plt_resolver(struct dynnacl_obj *dynnacl_obj,
+                          user_plt_resolver_t plt_resolver,
+                          void *handle);
+void elf_set_plt_entry(struct dynnacl_obj *dynnacl_obj,
+                       int import_id, void *func);
 
 #endif

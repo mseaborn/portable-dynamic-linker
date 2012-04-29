@@ -29,6 +29,9 @@ struct dynnacl_obj {
   void *entry;
   ElfW(Dyn) *pt_dynamic;
 
+  void **dt_pltgot;
+  size_t plt_entries;
+
   user_plt_resolver_t user_plt_resolver;
   void *user_plt_resolver_handle;
 };
@@ -398,6 +401,11 @@ struct dynnacl_obj *load_elf_file(const char *filename,
   dynnacl_obj->load_bias = load_bias;
   dynnacl_obj->entry = (void *) (ehdr.e_entry + load_bias);
   dynnacl_obj->pt_dynamic = dynamic;
+  dynnacl_obj->dt_pltgot = NULL;
+  dynnacl_obj->plt_entries = 0;
+  uintptr_t pltgot = get_dynamic_entry(dynamic, DT_PLTGOT);
+  if (pltgot != 0)
+    dynnacl_obj->dt_pltgot = (void **) (pltgot + load_bias);
 
   close(fd);
 
@@ -408,6 +416,32 @@ struct dynnacl_obj *load_elf_file(const char *filename,
     *out_phnum = ehdr.e_phnum;
 
   return dynnacl_obj;
+}
+
+static void init_lazy_pltgot(struct dynnacl_obj *dynnacl_obj) {
+  /* Apply relocations */
+  int rel_type = get_dynamic_entry(dynnacl_obj->pt_dynamic, DT_PLTREL);
+  assert(rel_type == ELFW_DT_RELW);
+  ElfW_Reloc *relocs =
+    (ElfW_Reloc *) (dynnacl_obj->load_bias +
+                    get_dynamic_entry(dynnacl_obj->pt_dynamic, DT_JMPREL));
+  size_t relocs_size = get_dynamic_entry(dynnacl_obj->pt_dynamic, DT_PLTRELSZ);
+  size_t index;
+  dynnacl_obj->plt_entries = relocs_size / sizeof(ElfW_Reloc);
+  for (index = 0; index < dynnacl_obj->plt_entries; index++) {
+    ElfW_Reloc *reloc = &relocs[index];
+    int reloc_type = ELFW_R_TYPE(reloc->r_info);
+#if defined(__i386__)
+    assert(reloc_type == R_386_JMP_SLOT);
+#elif defined(__x86_64__)
+    assert(reloc_type == R_X86_64_JUMP_SLOT);
+#else
+# error Unsupported architecture
+#endif
+    ElfW(Addr) *addr =
+      (ElfW(Addr) *) (dynnacl_obj->load_bias + reloc->r_offset);
+    *addr += dynnacl_obj->load_bias;
+  }
 }
 
 void plt_trampoline();
@@ -476,4 +510,22 @@ uintptr_t elf_get_load_bias(struct dynnacl_obj *dynnacl_obj) {
 
 uintptr_t elf_get_dynamic_entry(struct dynnacl_obj *dynnacl_obj, int type) {
   return get_dynamic_entry(dynnacl_obj->pt_dynamic, type);
+}
+
+void elf_set_plt_resolver(struct dynnacl_obj *dynnacl_obj,
+                          user_plt_resolver_t plt_resolver,
+                          void *handle) {
+  if (dynnacl_obj->dt_pltgot == NULL)
+    return;
+  init_lazy_pltgot(dynnacl_obj);
+  dynnacl_obj->dt_pltgot[1] = dynnacl_obj;
+  dynnacl_obj->dt_pltgot[2] = plt_trampoline;
+  dynnacl_obj->user_plt_resolver = plt_resolver;
+  dynnacl_obj->user_plt_resolver_handle = handle;
+}
+
+void elf_set_plt_entry(struct dynnacl_obj *dynnacl_obj,
+                       int import_id, void *func) {
+  assert(import_id < dynnacl_obj->plt_entries);
+  dynnacl_obj->dt_pltgot[3 + import_id] = func;
 }
