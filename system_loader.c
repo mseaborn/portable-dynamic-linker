@@ -437,6 +437,9 @@ void *system_plt_resolver(struct dynnacl_obj *dynnacl_obj, int import_id) {
   /* This could be inlined into the assembly code above, but that
      would require putting knowledge of the struct layout into the
      assembly code. */
+#if defined(__i386__)
+  import_id /= 8;
+#endif
   return dynnacl_obj->user_plt_resolver(dynnacl_obj->user_plt_resolver_handle,
                                         import_id);
 }
