@@ -9,11 +9,29 @@
 #include "shared.h"
 
 
+/* TODO: Remove this architecture-specific stuff from this file. */
+#if defined(__i386__)
+typedef ElfW(Rel) ElfW_Reloc;
+# define ELFW_R_TYPE(x) ELF32_R_TYPE(x)
+# define ELFW_R_SYM(x) ELF32_R_SYM(x)
+# define ELFW_DT_RELW DT_REL
+# define ELFW_DT_RELWSZ DT_RELSZ
+#elif defined(__x86_64__)
+typedef ElfW(Rela) ElfW_Reloc;
+# define ELFW_R_TYPE(x) ELF64_R_TYPE(x)
+# define ELFW_R_SYM(x) ELF64_R_SYM(x)
+# define ELFW_DT_RELW DT_RELA
+# define ELFW_DT_RELWSZ DT_RELASZ
+#else
+# error Unsupported architecture
+#endif
+
 struct elf_obj {
   struct dynnacl_obj *dynnacl_obj;
   ElfW(Sym) *dt_symtab;
   char *dt_strtab;
   uint32_t *dt_hash;
+  ElfW_Reloc *dt_jmprel;
 };
 
 static unsigned long elf_hash(const uint8_t *name) {
@@ -81,10 +99,21 @@ static int resolver_call_count = 0;
 
 static void *my_plt_resolver(void *handle, int import_id) {
   struct elf_obj *elf_obj = handle;
-  printf("elf resolver called for func #%i!\n", import_id);
+
+  int sym_number = ELFW_R_SYM(elf_obj->dt_jmprel[import_id].r_info);
+  char *name = elf_obj->dt_strtab + elf_obj->dt_symtab[sym_number].st_name;
+
+  printf("elf resolver called for func #%i: \"%s\"\n", import_id, name);
   resolver_call_count++;
 
-  void *value = example_import0;
+  void *value;
+  if (strcmp(name, "import_func0") == 0) {
+    value = example_import0;
+  } else if (strcmp(name, "import_func1") == 0) {
+    value = example_import1;
+  } else {
+    assert(0);
+  }
   elf_set_plt_entry(elf_obj->dynnacl_obj, import_id, value);
   return value;
 }
@@ -99,6 +128,7 @@ int main() {
   elf_obj.dt_symtab = get_biased_dynamic_entry(dynnacl_obj, DT_SYMTAB);
   elf_obj.dt_strtab = get_biased_dynamic_entry(dynnacl_obj, DT_STRTAB);
   elf_obj.dt_hash = get_biased_dynamic_entry(dynnacl_obj, DT_HASH);
+  elf_obj.dt_jmprel = get_biased_dynamic_entry(dynnacl_obj, DT_JMPREL);
 
   dump_symbols(&elf_obj);
 
@@ -130,6 +160,16 @@ int main() {
   resolver_call_count = 0;
   result = func();
   assert(strcmp(result, "called imported func #0") == 0);
+  assert(resolver_call_count == 0);
+
+  func = (const char *(*)(void)) look_up_func(&elf_obj, "test_import1");
+  assert(func != NULL);
+  result = func();
+  assert(strcmp(result, "called imported func #1") == 0);
+  assert(resolver_call_count == 1);
+  resolver_call_count = 0;
+  result = func();
+  assert(strcmp(result, "called imported func #1") == 0);
   assert(resolver_call_count == 0);
 
   return 0;
