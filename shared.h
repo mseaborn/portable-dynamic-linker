@@ -2,6 +2,8 @@
 #ifndef SHARED_H_
 #define SHARED_H_
 
+#include <stdint.h>
+
 struct dynnacl_prog_header;
 
 typedef void *(*user_plt_resolver_t)(void *handle, int import_id);
@@ -103,5 +105,8 @@ void dynnacl_set_plt_resolver(struct dynnacl_obj *dynnacl_obj,
                               void *handle);
 void dynnacl_set_plt_entry(struct dynnacl_obj *dynnacl_obj,
                            int import_id, void *func);
+
+uintptr_t elf_get_load_bias(struct dynnacl_obj *dynnacl_obj);
+uintptr_t elf_get_dynamic_entry(struct dynnacl_obj *dynnacl_obj, int type);
 
 #endif

@@ -25,7 +25,10 @@
 
 
 struct dynnacl_obj {
+  uintptr_t load_bias;
   void *entry;
+  ElfW(Dyn) *pt_dynamic;
+
   user_plt_resolver_t user_plt_resolver;
   void *user_plt_resolver_handle;
 };
@@ -206,7 +209,8 @@ ElfW(Word) get_dynamic_entry(ElfW(Dyn) *dynamic, int field) {
       return dynamic->d_un.d_val;
     }
   }
-  assert(0);
+  /* TODO: Distinguish between 0 and the field not being present. */
+  return 0;
 }
 
 /*
@@ -391,7 +395,9 @@ struct dynnacl_obj *load_elf_file(const char *filename,
   struct dynnacl_obj *dynnacl_obj = malloc(sizeof(dynnacl_obj));
   assert(dynnacl_obj != NULL);
 
+  dynnacl_obj->load_bias = load_bias;
   dynnacl_obj->entry = (void *) (ehdr.e_entry + load_bias);
+  dynnacl_obj->pt_dynamic = dynamic;
 
   close(fd);
 
@@ -459,4 +465,12 @@ void dynnacl_set_plt_entry(struct dynnacl_obj *dynnacl_obj,
                            int import_id, void *func) {
   struct dynnacl_prog_header *prog_header = dynnacl_obj->entry;
   prog_header->pltgot[import_id] = func;
+}
+
+uintptr_t elf_get_load_bias(struct dynnacl_obj *dynnacl_obj) {
+  return dynnacl_obj->load_bias;
+}
+
+uintptr_t elf_get_dynamic_entry(struct dynnacl_obj *dynnacl_obj, int type) {
+  return get_dynamic_entry(dynnacl_obj->pt_dynamic, type);
 }
