@@ -7,7 +7,6 @@
 #define _GNU_SOURCE
 #include <assert.h>
 #include <elf.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <link.h>
@@ -16,8 +15,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
-#include <sys/uio.h>
-#include <unistd.h>
+
+/*
+ * Get inline functions for system calls.
+ */
+static int my_errno;
+#define SYS_ERRNO my_errno
+#include "linux_syscall_support.h"
 
 #include "shared.h"
 
@@ -80,7 +84,7 @@ static size_t my_strlen(const char *s) {
  * is rendering numbers, which is, in fact, pretty trivial.
  * bufsz of course must be enough to hold INT_MIN in decimal.
  */
-static void iov_int_string(int value, struct iovec *iov,
+static void iov_int_string(int value, struct kernel_iovec *iov,
                            char *buf, size_t bufsz) {
   char *p = &buf[bufsz];
   int negative = value < 0;
@@ -106,7 +110,7 @@ __attribute__((noreturn)) static void fail(const char *filename,
                                            const char *item2, int value2) {
   char valbuf1[32];
   char valbuf2[32];
-  struct iovec iov[] = {
+  struct kernel_iovec iov[] = {
     STRING_IOV("bootstrap_helper: ", 1),
     { (void *) filename, my_strlen(filename) },
     STRING_IOV(": ", 1),
@@ -127,23 +131,24 @@ __attribute__((noreturn)) static void fail(const char *filename,
   if (item2 != NULL)
     iov_int_string(value2, &iov[10], valbuf2, sizeof(valbuf2));
 
-  writev(2, iov, niov);
-  exit(2);
+  sys_writev(2, iov, niov);
+  sys_exit_group(2);
+  while (1) *(volatile int *) 0 = 0;  /* Crash.  */
 }
 
 
 static int my_open(const char *file, int oflag) {
-  int result = open(file, oflag, 0);
+  int result = sys_open(file, oflag, 0);
   if (result < 0)
-    fail(file, "Cannot open ELF file!  ", "errno", errno, NULL, 0);
+    fail(file, "Cannot open ELF file!  ", "errno", my_errno, NULL, 0);
   return result;
 }
 
 static void my_pread(const char *file, const char *fail_message,
                      int fd, void *buf, size_t bufsz, uintptr_t pos) {
-  ssize_t result = pread(fd, buf, bufsz, pos);
+  ssize_t result = sys_pread64(fd, buf, bufsz, pos);
   if (result < 0)
-    fail(file, fail_message, "errno", errno, NULL, 0);
+    fail(file, fail_message, "errno", my_errno, NULL, 0);
   if ((size_t) result != bufsz)
     fail(file, fail_message, "read count", result, NULL, 0);
 }
@@ -152,18 +157,22 @@ static uintptr_t my_mmap(const char *file,
                          const char *segment_type, unsigned int segnum,
                          uintptr_t address, size_t size,
                          int prot, int flags, int fd, uintptr_t pos) {
-  void *result = mmap((void *) address, size, prot, flags, fd, pos);
+#if defined(__NR_mmap2)
+  void *result = sys_mmap2((void *) address, size, prot, flags, fd, pos >> 12);
+#else
+  void *result = sys_mmap((void *) address, size, prot, flags, fd, pos);
+#endif
   if (result == MAP_FAILED)
     fail(file, "Failed to map segment!  ",
-         segment_type, segnum, "errno", errno);
+         segment_type, segnum, "errno", my_errno);
   return (uintptr_t) result;
 }
 
 static void my_mprotect(const char *file, unsigned int segnum,
                         uintptr_t address, size_t size, int prot) {
-  if (mprotect((void *) address, size, prot) < 0)
+  if (sys_mprotect((void *) address, size, prot) < 0)
     fail(file, "Failed to mprotect segment hole!  ",
-         "segment", segnum, "errno", errno);
+         "segment", segnum, "errno", my_errno);
 }
 
 
@@ -413,7 +422,7 @@ struct dynnacl_obj *load_elf_file(const char *filename,
       (ElfW_Reloc *) (get_dynamic_entry(dynamic, DT_JMPREL) + load_bias);
   }
 
-  close(fd);
+  sys_close(fd);
 
   if (out_phdr != NULL)
     *out_phdr = (ehdr.e_phoff - first_load->p_offset +
