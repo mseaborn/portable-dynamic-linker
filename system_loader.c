@@ -395,7 +395,7 @@ struct dynnacl_obj *load_elf_file(const char *filename,
     }
   }
 
-  struct dynnacl_obj *dynnacl_obj = malloc(sizeof(dynnacl_obj));
+  struct dynnacl_obj *dynnacl_obj = malloc(sizeof(struct dynnacl_obj));
   assert(dynnacl_obj != NULL);
 
   dynnacl_obj->load_bias = load_bias;
