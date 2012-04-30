@@ -456,7 +456,10 @@ static void init_lazy_pltgot(struct dynnacl_obj *dynnacl_obj) {
   }
 }
 
-void plt_trampoline();
+/* We need visibility=hidden otherwise gcc generates code that gets
+   the address of this function via the GOT, which doesn't work if
+   we're trying to be a PIE without relocations. */
+__attribute__((visibility("hidden"))) void plt_trampoline();
 #if defined(__i386__)
 /* A more sophisticated version would save and restore registers, in
    case the function called through the PLT passes arguments in
