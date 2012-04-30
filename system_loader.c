@@ -5,7 +5,6 @@
 */
 
 #define _GNU_SOURCE
-#include <assert.h>
 #include <elf.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -19,10 +18,11 @@
 /*
  * Get inline functions for system calls.
  */
-static int my_errno;
-#define SYS_ERRNO my_errno
-#include "linux_syscall_support.h"
+/* static int my_errno; */
+/* #define SYS_ERRNO my_errno */
+/* #include "linux_syscall_support.h" */
 
+#include "minimal_libc.h"
 #include "shared.h"
 
 #define MAX_PHNUM               12
