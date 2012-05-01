@@ -231,11 +231,11 @@ ElfW(Word) get_dynamic_entry(ElfW(Dyn) *dynamic, int field) {
 /*
  * Open an ELF file and load it into memory.
  */
-struct dynnacl_obj *load_elf_file(const char *filename,
-                                  size_t pagesize,
-                                  ElfW(Addr) *out_phdr,
-                                  ElfW(Addr) *out_phnum,
-                                  const char **out_interp) {
+static struct dynnacl_obj *load_elf_file(const char *filename,
+                                         size_t pagesize,
+                                         ElfW(Addr) *out_phdr,
+                                         ElfW(Addr) *out_phnum,
+                                         const char **out_interp) {
   int fd = my_open(filename, O_RDONLY);
 
   ElfW(Ehdr) ehdr;
@@ -403,7 +403,8 @@ struct dynnacl_obj *load_elf_file(const char *filename,
           break;
         }
     default:
-      assert(0);
+      ;
+      /* assert(0); */
     }
   }
 

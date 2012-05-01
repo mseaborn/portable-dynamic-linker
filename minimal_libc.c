@@ -51,6 +51,37 @@ void *malloc(size_t size) {
 }
 
 int printf(const char *fmt, ...) {
-  sys_write(1, fmt, strlen(fmt));
+  char buf[1000];
+  int len = 0;
+
+  va_list args;
+  va_start(args, fmt);
+  for (; *fmt != 0; fmt++) {
+    if (*fmt == '%') {
+      switch (*++fmt) {
+      case 'i':
+      case 'd':
+        {
+          /* int val = */
+          va_arg(args, int);
+          buf[len++] = '%';
+          buf[len++] = 'i';
+          break;
+        }
+      case 's':
+        {
+          const char *str = va_arg(args, const char *);
+          while (*str)
+            buf[len++] = *str++;
+          break;
+        }
+      default:
+        buf[len++] = '?';
+      }
+    } else {
+      buf[len++] = *fmt;
+    }
+  }
+  sys_write(1, buf, len);
   return 0;
 }

@@ -1,5 +1,6 @@
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <elf.h>
@@ -109,6 +110,37 @@ static void *my_plt_resolver(void *handle, int import_id) {
   return value;
 }
 
+struct elf_obj *load_elf_file(const char *filename) {
+  struct dynnacl_obj *dynnacl_obj = dynnacl_load_from_elf_file(filename);
+
+  struct elf_obj *elf_obj = malloc(sizeof(struct elf_obj));
+  assert(elf_obj != NULL);
+
+  elf_obj->dynnacl_obj = dynnacl_obj;
+  elf_obj->dt_symtab = get_biased_dynamic_entry(dynnacl_obj, DT_SYMTAB);
+  elf_obj->dt_strtab = get_biased_dynamic_entry(dynnacl_obj, DT_STRTAB);
+  elf_obj->dt_hash = get_biased_dynamic_entry(dynnacl_obj, DT_HASH);
+  return elf_obj;
+}
+
+void test2() {
+#if defined(__i386__)
+# define LIBC "/lib32/libc.so.6"
+#elif defined(__x86_64__)
+# define LIBC "/lib/libc.so.6"
+#endif
+  printf("try loading libc\n");
+  struct elf_obj *elf_obj = load_elf_file(LIBC);
+  elf_set_plt_resolver(elf_obj->dynnacl_obj, my_plt_resolver, &elf_obj);
+
+  int (*func)();
+  func = look_up_func(elf_obj, "write");
+  assert(func != NULL);
+  const char *str = "called via libc!\n";
+  int written = func(1, str, strlen(str));
+  assert(written == strlen(str));
+}
+
 int main() {
   struct dynnacl_obj *dynnacl_obj =
     dynnacl_load_from_elf_file("example_lib_elf.so");
@@ -166,5 +198,8 @@ int main() {
   func2 = look_up_func(&elf_obj, "test_args_via_plt");
   assert(func2());
 
+  test2();
+
+  printf("passed\n");
   return 0;
 }
