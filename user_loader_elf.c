@@ -77,6 +77,12 @@ const char *example_import1() {
   return "called imported func #1";
 }
 
+int example_args_test(int arg1, int arg2, int arg3, int arg4,
+                      int arg5, int arg6, int arg7, int arg8) {
+  return (arg1 == 1 && arg2 == 2 && arg3 == 3 && arg4 == 4 &&
+          arg5 == 5 && arg6 == 6 && arg7 == 7 && arg8 == 8);
+}
+
 static int resolver_call_count = 0;
 
 static void *my_plt_resolver(void *handle, int import_id) {
@@ -94,6 +100,8 @@ static void *my_plt_resolver(void *handle, int import_id) {
     value = example_import0;
   } else if (strcmp(name, "import_func1") == 0) {
     value = example_import1;
+  } else if (strcmp(name, "import_args_test") == 0) {
+    value = example_args_test;
   } else {
     assert(0);
   }
@@ -153,6 +161,10 @@ int main() {
   result = func();
   assert(strcmp(result, "called imported func #1") == 0);
   assert(resolver_call_count == 0);
+
+  int (*func2)(void);
+  func2 = look_up_func(&elf_obj, "test_args_via_plt");
+  assert(func2());
 
   return 0;
 }

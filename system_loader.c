@@ -473,9 +473,23 @@ asm(".pushsection \".text\",\"ax\",@progbits\n"
 #elif defined(__x86_64__)
 asm(".pushsection \".text\",\"ax\",@progbits\n"
     "plt_trampoline:\n"
-    "pop %rdi\n" /* Argument 1 */
-    "pop %rsi\n" /* Argument 2 */
+    /* Save registers that take function arguments. */
+    "push %rcx\n"
+    "push %rdx\n"
+    "push %rdi\n"
+    "push %rsi\n"
+    "push %r8\n"
+    "push %r9\n"
+    "movq 6*8(%rsp), %rdi\n" /* Argument 1 */
+    "movq 7*8(%rsp), %rsi\n" /* Argument 2 */
     "call system_plt_resolver\n"
+    "pop %r9\n"
+    "pop %r8\n"
+    "pop %rsi\n"
+    "pop %rdi\n"
+    "pop %rdx\n"
+    "pop %rcx\n"
+    "add $16, %rsp\n" /* Drop arguments */
     "jmp *%rax\n"
     ".popsection\n");
 #else
