@@ -126,12 +126,12 @@ int main() {
   const char *(*func)(void);
   const char *result;
 
-  func = (const char *(*)(void)) look_up_func(&elf_obj, "foo");
+  func = look_up_func(&elf_obj, "foo");
   assert(func != NULL);
   result = func();
   assert(strcmp(result, "example string") == 0);
 
-  func = (const char *(*)(void)) look_up_func(&elf_obj, "bar");
+  func = look_up_func(&elf_obj, "bar");
   assert(func != NULL);
   result = func();
   assert(strcmp(result, "another example string") == 0);
@@ -142,7 +142,7 @@ int main() {
   printf("testing imported functions...\n");
   elf_set_plt_resolver(dynnacl_obj, my_plt_resolver, &elf_obj);
 
-  func = (const char *(*)(void)) look_up_func(&elf_obj, "test_import0");
+  func = look_up_func(&elf_obj, "test_import0");
   assert(func != NULL);
   result = func();
   assert(strcmp(result, "called imported func #0") == 0);
@@ -152,7 +152,7 @@ int main() {
   assert(strcmp(result, "called imported func #0") == 0);
   assert(resolver_call_count == 0);
 
-  func = (const char *(*)(void)) look_up_func(&elf_obj, "test_import1");
+  func = look_up_func(&elf_obj, "test_import1");
   assert(func != NULL);
   result = func();
   assert(strcmp(result, "called imported func #1") == 0);

@@ -24,8 +24,8 @@ void *my_plt_resolver(void *handle, int import_id) {
   resolver_last_id = import_id;
 
   void *funcs[] = {
-    (void *) example_import0,
-    (void *) example_import1,
+    example_import0,
+    example_import1,
   };
   void *func = funcs[import_id];
   dynnacl_set_plt_entry(dynnacl_obj, import_id, func);
@@ -41,18 +41,18 @@ int main() {
   printf("testing exported functions...\n");
   const char *(*func)(void);
   const char *result;
-  func = (const char *(*)(void)) function_table[0];
+  func = function_table[0];
   result = func();
   assert(strcmp(result, "example string") == 0);
 
-  func = (const char *(*)(void)) function_table[1];
+  func = function_table[1];
   result = func();
   assert(strcmp(result, "another example string") == 0);
 
   printf("testing imported functions...\n");
   dynnacl_set_plt_resolver(dynnacl_obj, my_plt_resolver, dynnacl_obj);
 
-  func = (const char *(*)(void)) function_table[2];
+  func = function_table[2];
   result = func();
   assert(strcmp(result, "called imported func #0") == 0);
   assert(resolver_call_count == 1);
@@ -62,7 +62,7 @@ int main() {
   assert(strcmp(result, "called imported func #0") == 0);
   assert(resolver_call_count == 0);
 
-  func = (const char *(*)(void)) function_table[3];
+  func = function_table[3];
   result = func();
   assert(strcmp(result, "called imported func #1") == 0);
   assert(resolver_call_count == 1);
