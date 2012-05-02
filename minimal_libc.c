@@ -50,6 +50,16 @@ void *malloc(size_t size) {
   return mapped;
 }
 
+static char *format_int(char *buf, size_t buf_size, int number) {
+  char *pos = buf + buf_size;
+  *--pos = 0;
+  do {
+    *--pos = '0' + number % 10;
+    number /= 10;
+  } while (number != 0);
+  return pos;
+}
+
 int printf(const char *fmt, ...) {
   char buf[1000];
   int len = 0;
@@ -62,10 +72,11 @@ int printf(const char *fmt, ...) {
       case 'i':
       case 'd':
         {
-          /* int val = */
-          va_arg(args, int);
-          buf[len++] = '%';
-          buf[len++] = 'i';
+          int val = va_arg(args, int);
+          char tmp[20];
+          char *str = format_int(tmp, sizeof(tmp), val);
+          while (*str)
+            buf[len++] = *str++;
           break;
         }
       case 's':
