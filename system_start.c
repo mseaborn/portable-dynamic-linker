@@ -1,14 +1,73 @@
 
 #include <stdint.h>
 
+#include <asm/ldt.h>
+#include <asm/prctl.h>
+
 #include "minimal_libc.h"
 
 
 int main(int argc, char **argv);
 
+struct glibc_tcbhead {
+  void *tcb;
+  void *dtv;
+  void *self;
+  int multiple_threads;
+  void *sysinfo;
+  uintptr_t stack_guard;
+  uintptr_t pointer_guard;
+  int gscope_flag;
+  char reserved[100];
+};
+
+static struct glibc_tcbhead initial_tls;
+
+__attribute__((visibility("hidden"))) void syscall_routine();
+asm(".pushsection \".text\",\"ax\",@progbits\n"
+    "syscall_routine:\n"
+#if defined(__i386__)
+    "int $0x80\n"
+    "ret\n"
+#elif defined(__x86_64__)
+    "syscall\n"
+    "ret\n"
+#else
+# error Unsupported architecture
+#endif
+    ".popsection\n");
+
+static void init_tls() {
+#if defined(__i386__)
+  initial_tls.sysinfo = syscall_routine;
+
+  struct user_desc ud;
+  /* memset(&ud, 0, sizeof(ud)); */
+  ud.read_exec_only = 0;
+  ud.seg_32bit = 1;
+  ud.seg_not_present = 0;
+  ud.useable = 1;
+  ud.base_addr = (uintptr_t) &initial_tls;
+  ud.entry_number = -1;
+  ud.contents = MODIFY_LDT_CONTENTS_DATA;
+  ud.limit = 0xfffff; /* All of 32-bit address space */
+  ud.limit_in_pages = 1;
+  int rc = sys_set_thread_area(&ud);
+  assert(rc == 0);
+  int selector = (ud.entry_number << 3) | 3;
+  asm("mov %0, %%gs" : : "r"(selector));
+#elif defined(__x86_64__)
+  int rc = sys_arch_prctl(ARCH_SET_FS, &initial_tls);
+  assert(rc == 0);
+#else
+# error Unsupported architecture
+#endif
+}
+
 void do_load(uintptr_t *stack) {
   int argc = stack[0];
   char **argv = (char **) &stack[1];
+  init_tls();
   sys_exit_group(main(argc, argv));
 }
 

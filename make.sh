@@ -8,7 +8,8 @@ for bits in 32 64; do
   mkdir -p $dir
 
   system_lib="system_loader.c system_start.c minimal_libc.c -nostdlib"
-  test_flags="-pie -fPIE -fvisibility=hidden"
+  # test_flags="-pie -fPIE -fvisibility=hidden"
+  test_flags="-static"
 
   gcc $flags -fvisibility=hidden -shared -fPIC -c \
       example_lib_min.c -o $dir/example_lib_min.o
