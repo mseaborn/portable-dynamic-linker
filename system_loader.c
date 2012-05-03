@@ -53,6 +53,9 @@ struct dynnacl_obj {
   ElfW_Reloc *dt_jmprel;
   size_t plt_entries;
 
+  struct dynnacl_reloc *relocs;
+  size_t relocs_count;
+
   user_plt_resolver_t user_plt_resolver;
   void *user_plt_resolver_handle;
 };
@@ -384,11 +387,18 @@ static struct dynnacl_obj *load_elf_file(const char *filename,
   }
   assert(dynamic != NULL);
 
+  struct dynnacl_obj *dynnacl_obj = malloc(sizeof(struct dynnacl_obj));
+  assert(dynnacl_obj != NULL);
+
   ElfW_Reloc *relocs =
     (ElfW_Reloc *) (load_bias +
                     get_dynamic_entry(dynamic, ELFW_DT_RELW));
   size_t relocs_size = get_dynamic_entry(dynamic, ELFW_DT_RELWSZ);
-  for (i = 0; i < relocs_size / sizeof(ElfW_Reloc); i++) {
+  size_t relocs_count = relocs_size / sizeof(ElfW_Reloc);
+  dynnacl_obj->relocs = malloc(sizeof(struct dynnacl_reloc) * relocs_count);
+  assert(dynnacl_obj->relocs != NULL);
+  dynnacl_obj->relocs_count = 0;
+  for (i = 0; i < relocs_count; i++) {
     ElfW_Reloc *reloc = &relocs[i];
     int reloc_type = ELFW_R_TYPE(reloc->r_info);
     switch (reloc_type) {
@@ -402,14 +412,26 @@ static struct dynnacl_obj *load_elf_file(const char *filename,
           *addr += load_bias;
           break;
         }
-    default:
-      ;
-      /* assert(0); */
+#if defined(__i386__)
+      case R_386_GLOB_DAT:
+      case R_386_32:
+#elif defined(__x86_64__)
+      case R_X86_64_GLOB_DAT:
+      case R_X86_64_64:
+#endif
+        {
+          struct dynnacl_reloc *reloc_new =
+            &dynnacl_obj->relocs[dynnacl_obj->relocs_count++];
+          reloc_new->r_offset = reloc->r_offset;
+          reloc_new->r_symbol = ELFW_R_SYM(reloc->r_info);
+          break;
+        }
+      default:
+        printf("Unrecognised relocation type %i\n", reloc_type);
+        /* assert(0); */
+        break;
     }
   }
-
-  struct dynnacl_obj *dynnacl_obj = malloc(sizeof(struct dynnacl_obj));
-  assert(dynnacl_obj != NULL);
 
   dynnacl_obj->load_bias = load_bias;
   dynnacl_obj->entry = (void *) (ehdr.e_entry + load_bias);
@@ -566,4 +588,11 @@ int elf_symbol_id_from_import_id(struct dynnacl_obj *dynnacl_obj,
   /* This implementation needs to be on the system side because the
      size of the relocation entry is architecture-specific. */
   return ELFW_R_SYM(dynnacl_obj->dt_jmprel[import_id].r_info);
+}
+
+void elf_get_relocs(struct dynnacl_obj *dynnacl_obj,
+                    struct dynnacl_reloc **relocs,
+                    size_t *relocs_count) {
+  *relocs = dynnacl_obj->relocs;
+  *relocs_count = dynnacl_obj->relocs_count;
 }

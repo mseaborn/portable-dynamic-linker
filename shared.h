@@ -3,6 +3,7 @@
 #define SHARED_H_
 
 #include <stdint.h>
+#include <stdlib.h>
 
 struct dynnacl_prog_header;
 
@@ -95,6 +96,11 @@ extern void *pltgot_imports[];
     .user_info = user_info_value, \
   };
 
+struct dynnacl_reloc {
+  uint32_t r_offset;
+  int r_symbol;
+};
+
 struct dynnacl_obj;
 
 struct dynnacl_obj *dynnacl_load_from_elf_file(const char *filename);
@@ -115,5 +121,8 @@ void elf_set_plt_entry(struct dynnacl_obj *dynnacl_obj,
                        int import_id, void *func);
 int elf_symbol_id_from_import_id(struct dynnacl_obj *dynnacl_obj,
                                  int import_id);
+void elf_get_relocs(struct dynnacl_obj *dynnacl_obj,
+                    struct dynnacl_reloc **relocs,
+                    size_t *relocs_count);
 
 #endif

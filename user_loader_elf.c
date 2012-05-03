@@ -198,6 +198,25 @@ int main() {
   func2 = look_up_func(&elf_obj, "test_args_via_plt");
   assert(func2());
 
+  struct dynnacl_reloc *relocs;
+  size_t relocs_count;
+  elf_get_relocs(dynnacl_obj, &relocs, &relocs_count);
+  int index;
+  for (index = 0; index < relocs_count; index++) {
+    struct dynnacl_reloc *reloc = &relocs[index];
+    ElfW(Sym) *sym = &elf_obj.dt_symtab[reloc->r_symbol];
+    printf("Applying reloc %i: %s\n", index, elf_obj.dt_strtab + sym->st_name);
+    uintptr_t dest = elf_get_load_bias(dynnacl_obj) + reloc->r_offset;
+    uintptr_t value = elf_get_load_bias(dynnacl_obj) + sym->st_value;
+    *(uintptr_t *) dest = value;
+  }
+
+  int (*test_var_func)(void);
+  test_var_func = look_up_func(&elf_obj, "test_var");
+  assert(test_var_func() == 123);
+  test_var_func = look_up_func(&elf_obj, "test_var2");
+  assert(test_var_func() == 456);
+
   test2();
 
   printf("passed\n");

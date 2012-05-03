@@ -23,3 +23,16 @@ const char *test_import1() {
 int test_args_via_plt() {
   return import_args_test(1, 2, 3, 4, 5, 6, 7, 8);
 }
+
+/* Generates a R_*_GLOB_DAT relocation. */
+int var = 123;
+int test_var() {
+  return var;
+}
+
+/* Generates a R_386_32/R_X86_64_64 relocation. */
+int var2 = 456;
+static int *var2_ptr = &var2;
+int test_var2() {
+  return *var2_ptr;
+}
