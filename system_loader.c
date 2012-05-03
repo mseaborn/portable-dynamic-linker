@@ -241,12 +241,16 @@ static int map_reloc_type(int reloc_type) {
       return R_DYNNACL_PTR;
     case R_386_TLS_DTPOFF32:
       return R_DYNNACL_TLS_DTPOFF;
+    case R_386_TLS_DTPMOD32:
+      return R_DYNNACL_TLS_DTPMOD;
 #elif defined(__x86_64__)
     case R_X86_64_GLOB_DAT:
     case R_X86_64_64:
       return R_DYNNACL_PTR;
     case R_X86_64_DTPOFF64:
       return R_DYNNACL_TLS_DTPOFF;
+    case R_X86_64_DTPMOD64:
+      return R_DYNNACL_TLS_DTPMOD;
 #endif
     default:
       return 0;

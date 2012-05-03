@@ -102,7 +102,8 @@ struct dynnacl_reloc {
   int r_symbol;
 };
 #define R_DYNNACL_PTR 1
-#define R_DYNNACL_TLS_DTPOFF 2
+#define R_DYNNACL_TLS_DTPMOD 2
+#define R_DYNNACL_TLS_DTPOFF 3
 
 struct dynnacl_obj;
 

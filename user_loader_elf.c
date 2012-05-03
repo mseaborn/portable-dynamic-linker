@@ -23,14 +23,34 @@ char tls_buf[1000];
 char *next_tls = tls_buf;
 
 struct tls_index {
-  uintptr_t mod_id;
+  void *module;
   uintptr_t offset;
 };
+
+static void allocate_tls(struct elf_obj *elf_obj) {
+  if (elf_obj->tls_base != NULL)
+    return;
+  printf("allocating tls\n");
+  void *tls_template;
+  size_t file_size;
+  size_t mem_size;
+  elf_get_tls_template(elf_obj->dynnacl_obj, &tls_template,
+                       &file_size, &mem_size);
+  elf_obj->tls_base = next_tls;
+  next_tls += mem_size;
+  /* Copy the TLS template.  This must happen only after relocations
+     are applied. */
+  memcpy(elf_obj->tls_base, tls_template, file_size);
+  memset(elf_obj->tls_base + file_size, 0, mem_size - file_size);
+}
+
 /* We need the regparm attribute for x86-32. */
 __attribute__((regparm(1)))
-static void *tls_get_addr(struct tls_index *tls) {
-  printf("tls_get_addr(%i: %i, %i) called\n", tls, tls->mod_id, tls->offset);
-  return (void *) tls->offset;
+static void *tls_get_addr(struct tls_index *info) {
+  printf("tls_get_addr(%i: %i, %i) called\n", info, info->module, info->offset);
+  struct elf_obj *elf_obj = info->module;
+  allocate_tls(elf_obj);
+  return elf_obj->tls_base + info->offset;
 }
 
 static unsigned long elf_hash(const uint8_t *name) {
@@ -173,6 +193,7 @@ int main() {
   elf_obj.dt_symtab = get_biased_dynamic_entry(dynnacl_obj, DT_SYMTAB);
   elf_obj.dt_strtab = get_biased_dynamic_entry(dynnacl_obj, DT_STRTAB);
   elf_obj.dt_hash = get_biased_dynamic_entry(dynnacl_obj, DT_HASH);
+  elf_obj.tls_base = NULL;
 
   dump_symbols(&elf_obj);
 
@@ -220,14 +241,6 @@ int main() {
   func2 = look_up_func(&elf_obj, "test_args_via_plt");
   assert(func2());
 
-  /* The TLS area must be allocated before applying relocations. */
-  void *tls_template;
-  size_t file_size;
-  size_t mem_size;
-  elf_get_tls_template(dynnacl_obj, &tls_template, &file_size, &mem_size);
-  elf_obj.tls_base = next_tls;
-  next_tls += mem_size;
-
   struct dynnacl_reloc *relocs;
   size_t relocs_count;
   elf_get_relocs(dynnacl_obj, &relocs, &relocs_count);
@@ -244,12 +257,12 @@ int main() {
           *(uintptr_t *) dest = value;
           break;
         }
+      case R_DYNNACL_TLS_DTPMOD:
+        *(void **) dest = &elf_obj;
+        break;
       case R_DYNNACL_TLS_DTPOFF:
-        {
-          char *value = elf_obj.tls_base + sym->st_value;
-          *(char **) dest = value;
-          break;
-        }
+        *(uintptr_t *) dest = sym->st_value;
+        break;
       default:
         assert(0);
         break;
@@ -262,11 +275,9 @@ int main() {
   test_var_func = look_up_func(&elf_obj, "test_var2");
   assert(test_var_func() == 456);
 
-  /* The TLS template must be copied after relocations are applied. */
-  memcpy(elf_obj.tls_base, tls_template, file_size);
-  memset(elf_obj.tls_base + file_size, 0, mem_size - file_size);
-
   test_var_func = look_up_func(&elf_obj, "test_tls_var");
+  /* Only the first of these two calls will allocate the TLS area. */
+  assert(test_var_func() == 321);
   assert(test_var_func() == 321);
 
   test2();
