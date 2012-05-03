@@ -36,3 +36,8 @@ static int *var2_ptr = &var2;
 int test_var2() {
   return *var2_ptr;
 }
+
+__thread int tls_var = 321;
+int test_tls_var() {
+  return tls_var;
+}

@@ -56,6 +56,8 @@ struct dynnacl_obj {
   struct dynnacl_reloc *relocs;
   size_t relocs_count;
 
+  ElfW(Phdr) *pt_tls;
+
   user_plt_resolver_t user_plt_resolver;
   void *user_plt_resolver_handle;
 };
@@ -231,6 +233,26 @@ ElfW(Word) get_dynamic_entry(ElfW(Dyn) *dynamic, int field) {
   return 0;
 }
 
+static int map_reloc_type(int reloc_type) {
+  switch (reloc_type) {
+#if defined(__i386__)
+    case R_386_GLOB_DAT:
+    case R_386_32:
+      return R_DYNNACL_PTR;
+    case R_386_TLS_DTPOFF32:
+      return R_DYNNACL_TLS_DTPOFF;
+#elif defined(__x86_64__)
+    case R_X86_64_GLOB_DAT:
+    case R_X86_64_64:
+      return R_DYNNACL_PTR;
+    case R_X86_64_DTPOFF64:
+      return R_DYNNACL_TLS_DTPOFF;
+#endif
+    default:
+      return 0;
+  }
+}
+
 /*
  * Open an ELF file and load it into memory.
  */
@@ -377,18 +399,26 @@ static struct dynnacl_obj *load_elf_file(const char *filename,
     }
   }
 
+  struct dynnacl_obj *dynnacl_obj = malloc(sizeof(struct dynnacl_obj));
+  assert(dynnacl_obj != NULL);
+
+  dynnacl_obj->pt_tls = NULL;
+
   /* Find PT_DYNAMIC header. */
   ElfW(Dyn) *dynamic = NULL;
   for (i = 0; i < ehdr.e_phnum; ++i) {
-    if (phdr[i].p_type == PT_DYNAMIC) {
-      assert(dynamic == NULL);
-      dynamic = (ElfW(Dyn) *) (load_bias + phdr[i].p_vaddr);
+    switch (phdr[i].p_type) {
+      case PT_DYNAMIC:
+        assert(dynamic == NULL);
+        dynamic = (ElfW(Dyn) *) (load_bias + phdr[i].p_vaddr);
+        break;
+      case PT_TLS:
+        assert(dynnacl_obj->pt_tls == NULL);
+        dynnacl_obj->pt_tls = &phdr[i];
+        break;
     }
   }
   assert(dynamic != NULL);
-
-  struct dynnacl_obj *dynnacl_obj = malloc(sizeof(struct dynnacl_obj));
-  assert(dynnacl_obj != NULL);
 
   ElfW_Reloc *relocs =
     (ElfW_Reloc *) (load_bias +
@@ -412,24 +442,21 @@ static struct dynnacl_obj *load_elf_file(const char *filename,
           *addr += load_bias;
           break;
         }
-#if defined(__i386__)
-      case R_386_GLOB_DAT:
-      case R_386_32:
-#elif defined(__x86_64__)
-      case R_X86_64_GLOB_DAT:
-      case R_X86_64_64:
-#endif
+      default:
         {
-          struct dynnacl_reloc *reloc_new =
-            &dynnacl_obj->relocs[dynnacl_obj->relocs_count++];
-          reloc_new->r_offset = reloc->r_offset;
-          reloc_new->r_symbol = ELFW_R_SYM(reloc->r_info);
+          int new_type = map_reloc_type(reloc_type);
+          if (new_type != 0) {
+            struct dynnacl_reloc *reloc_new =
+              &dynnacl_obj->relocs[dynnacl_obj->relocs_count++];
+            reloc_new->r_type = new_type;
+            reloc_new->r_offset = reloc->r_offset;
+            reloc_new->r_symbol = ELFW_R_SYM(reloc->r_info);
+          } else {
+            printf("Unrecognised relocation type %i\n", reloc_type);
+            /* assert(0); */
+          }
           break;
         }
-      default:
-        printf("Unrecognised relocation type %i\n", reloc_type);
-        /* assert(0); */
-        break;
     }
   }
 
@@ -489,9 +516,17 @@ __attribute__((visibility("hidden"))) void plt_trampoline();
    registers. */
 asm(".pushsection \".text\",\"ax\",@progbits\n"
     "plt_trampoline:\n"
+    "push %eax\n"
+    "push %ecx\n"
+    "push %edx\n"
+    "movl 16(%esp), %edx\n" /* Argument 2 */
+    "movl 12(%esp), %eax\n" /* Argument 1 */
     "call system_plt_resolver\n"
-    "add $8, %esp\n" /* Drop arguments */
-    "jmp *%eax\n"
+    "pop %edx\n"
+    "movl (%esp), %ecx\n" /* Restore %ecx */
+    "movl %eax, (%esp)\n" /* Save function address for "ret" */
+    "movl 4(%esp), %eax\n" /* Restore %eax */
+    "ret $12\n"
     ".popsection\n");
 #elif defined(__x86_64__)
 asm(".pushsection \".text\",\"ax\",@progbits\n"
@@ -519,6 +554,7 @@ asm(".pushsection \".text\",\"ax\",@progbits\n"
 # error Unsupported architecture
 #endif
 
+__attribute__((regparm(2)))
 void *system_plt_resolver(struct dynnacl_obj *dynnacl_obj, int import_id) {
   /* This could be inlined into the assembly code above, but that
      would require putting knowledge of the struct layout into the
@@ -595,4 +631,17 @@ void elf_get_relocs(struct dynnacl_obj *dynnacl_obj,
                     size_t *relocs_count) {
   *relocs = dynnacl_obj->relocs;
   *relocs_count = dynnacl_obj->relocs_count;
+}
+
+void elf_get_tls_template(struct dynnacl_obj *dynnacl_obj,
+                          void **data, size_t *file_size, size_t *mem_size) {
+  if (dynnacl_obj->pt_tls == NULL) {
+    *data = NULL;
+    *file_size = 0;
+    *mem_size = 0;
+  } else {
+    *data = (void *) (dynnacl_obj->load_bias + dynnacl_obj->pt_tls->p_vaddr);
+    *file_size = dynnacl_obj->pt_tls->p_filesz;
+    *mem_size = dynnacl_obj->pt_tls->p_memsz;
+  }
 }

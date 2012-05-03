@@ -97,9 +97,12 @@ extern void *pltgot_imports[];
   };
 
 struct dynnacl_reloc {
+  int r_type;
   uint32_t r_offset;
   int r_symbol;
 };
+#define R_DYNNACL_PTR 1
+#define R_DYNNACL_TLS_DTPOFF 2
 
 struct dynnacl_obj;
 
@@ -124,5 +127,7 @@ int elf_symbol_id_from_import_id(struct dynnacl_obj *dynnacl_obj,
 void elf_get_relocs(struct dynnacl_obj *dynnacl_obj,
                     struct dynnacl_reloc **relocs,
                     size_t *relocs_count);
+void elf_get_tls_template(struct dynnacl_obj *dynnacl_obj,
+                          void **data, size_t *file_size, size_t *mem_size);
 
 #endif

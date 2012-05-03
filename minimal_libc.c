@@ -5,6 +5,23 @@
 #include "minimal_libc.h"
 
 
+void *memcpy(void *dest, const void *src, size_t size) {
+  char *dest_ptr = dest;
+  const char *src_ptr = src;
+  for (; size != 0; size--) {
+    *dest_ptr++ = *src_ptr++;
+  }
+  return dest;
+}
+
+void *memset(void *dest, int value, size_t size) {
+  char *dest_ptr = dest;
+  for (; size != 0; size--) {
+    *dest_ptr++ = value;
+  }
+  return dest;
+}
+
 size_t strlen(const char *s) {
   size_t n = 0;
   while (*s++ != '\0')
@@ -51,12 +68,17 @@ void *malloc(size_t size) {
 }
 
 static char *format_int(char *buf, size_t buf_size, int number) {
+  int negative = number < 0;
+  if (negative)
+    number = -number;
   char *pos = buf + buf_size;
   *--pos = 0;
   do {
     *--pos = '0' + number % 10;
     number /= 10;
   } while (number != 0);
+  if (negative)
+    *--pos = '-';
   return pos;
 }
 

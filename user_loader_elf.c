@@ -15,7 +15,23 @@ struct elf_obj {
   ElfW(Sym) *dt_symtab;
   char *dt_strtab;
   uint32_t *dt_hash;
+
+  char *tls_base;
 };
+
+char tls_buf[1000];
+char *next_tls = tls_buf;
+
+struct tls_index {
+  uintptr_t mod_id;
+  uintptr_t offset;
+};
+/* We need the regparm attribute for x86-32. */
+__attribute__((regparm(1)))
+static void *tls_get_addr(struct tls_index *tls) {
+  printf("tls_get_addr(%i: %i, %i) called\n", tls, tls->mod_id, tls->offset);
+  return (void *) tls->offset;
+}
 
 static unsigned long elf_hash(const uint8_t *name) {
   unsigned long h = 0;
@@ -103,6 +119,12 @@ static void *my_plt_resolver(void *handle, int import_id) {
     value = example_import1;
   } else if (strcmp(name, "import_args_test") == 0) {
     value = example_args_test;
+  } else if (strcmp(name, "___tls_get_addr") == 0) {
+    /* x86-32 version */
+    value = tls_get_addr;
+  } else if (strcmp(name, "__tls_get_addr") == 0) {
+    /* x86-64 version */
+    value = tls_get_addr;
   } else {
     assert(0);
   }
@@ -198,6 +220,14 @@ int main() {
   func2 = look_up_func(&elf_obj, "test_args_via_plt");
   assert(func2());
 
+  /* The TLS area must be allocated before applying relocations. */
+  void *tls_template;
+  size_t file_size;
+  size_t mem_size;
+  elf_get_tls_template(dynnacl_obj, &tls_template, &file_size, &mem_size);
+  elf_obj.tls_base = next_tls;
+  next_tls += mem_size;
+
   struct dynnacl_reloc *relocs;
   size_t relocs_count;
   elf_get_relocs(dynnacl_obj, &relocs, &relocs_count);
@@ -207,8 +237,23 @@ int main() {
     ElfW(Sym) *sym = &elf_obj.dt_symtab[reloc->r_symbol];
     printf("Applying reloc %i: %s\n", index, elf_obj.dt_strtab + sym->st_name);
     uintptr_t dest = elf_get_load_bias(dynnacl_obj) + reloc->r_offset;
-    uintptr_t value = elf_get_load_bias(dynnacl_obj) + sym->st_value;
-    *(uintptr_t *) dest = value;
+    switch (reloc->r_type) {
+      case R_DYNNACL_PTR:
+        {
+          uintptr_t value = elf_get_load_bias(dynnacl_obj) + sym->st_value;
+          *(uintptr_t *) dest = value;
+          break;
+        }
+      case R_DYNNACL_TLS_DTPOFF:
+        {
+          char *value = elf_obj.tls_base + sym->st_value;
+          *(char **) dest = value;
+          break;
+        }
+      default:
+        assert(0);
+        break;
+    }
   }
 
   int (*test_var_func)(void);
@@ -216,6 +261,13 @@ int main() {
   assert(test_var_func() == 123);
   test_var_func = look_up_func(&elf_obj, "test_var2");
   assert(test_var_func() == 456);
+
+  /* The TLS template must be copied after relocations are applied. */
+  memcpy(elf_obj.tls_base, tls_template, file_size);
+  memset(elf_obj.tls_base + file_size, 0, mem_size - file_size);
+
+  test_var_func = look_up_func(&elf_obj, "test_tls_var");
+  assert(test_var_func() == 321);
 
   test2();
 
