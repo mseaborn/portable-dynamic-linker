@@ -104,6 +104,7 @@ struct dynnacl_reloc {
 #define R_DYNNACL_PTR 1
 #define R_DYNNACL_TLS_DTPMOD 2
 #define R_DYNNACL_TLS_DTPOFF 3
+#define R_DYNNACL_TLS_TPOFF 4
 
 struct dynnacl_obj;
 
@@ -130,5 +131,8 @@ void elf_get_relocs(struct dynnacl_obj *dynnacl_obj,
                     size_t *relocs_count);
 void elf_get_tls_template(struct dynnacl_obj *dynnacl_obj,
                           void **data, size_t *file_size, size_t *mem_size);
+
+char *tls_get_base(void);
+uintptr_t tls_allocate_static_tls(size_t size);
 
 #endif

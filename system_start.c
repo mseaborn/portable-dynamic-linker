@@ -9,19 +9,35 @@
 
 int main(int argc, char **argv);
 
+#define STATIC_TLS_SIZE 100
 struct glibc_tcbhead {
-  void *tcb;
+  void *tcb; /* Part of ABI */
   void *dtv;
   void *self;
   int multiple_threads;
   void *sysinfo;
-  uintptr_t stack_guard;
+  uintptr_t stack_guard; /* Part of ABI as %gs:20 or %fs:40 */
   uintptr_t pointer_guard;
   int gscope_flag;
-  char reserved[100];
+  int private_futex;
+  void *__private_tm[5];
+  char static_tls[STATIC_TLS_SIZE];
 };
 
 static struct glibc_tcbhead initial_tls;
+static uintptr_t next_tls_offset = 0;
+
+char *tls_get_base(void) {
+  /* TODO: Make this thread-local. */
+  return (char *) &initial_tls;
+}
+
+uintptr_t tls_allocate_static_tls(size_t size) {
+  uintptr_t offset = next_tls_offset;
+  next_tls_offset += size;
+  assert(next_tls_offset < STATIC_TLS_SIZE);
+  return offsetof(struct glibc_tcbhead, static_tls) + offset;
+}
 
 __attribute__((visibility("hidden"))) void syscall_routine();
 asm(".pushsection \".text\",\"ax\",@progbits\n"

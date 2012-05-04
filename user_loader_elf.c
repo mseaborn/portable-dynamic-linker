@@ -16,11 +16,8 @@ struct elf_obj {
   char *dt_strtab;
   uint32_t *dt_hash;
 
-  char *tls_base;
+  uintptr_t tls_base_offset;
 };
-
-char tls_buf[1000];
-char *next_tls = tls_buf;
 
 struct tls_index {
   void *module;
@@ -28,7 +25,7 @@ struct tls_index {
 };
 
 static void allocate_tls(struct elf_obj *elf_obj) {
-  if (elf_obj->tls_base != NULL)
+  if (elf_obj->tls_base_offset != 0)
     return;
   printf("allocating tls\n");
   void *tls_template;
@@ -36,12 +33,12 @@ static void allocate_tls(struct elf_obj *elf_obj) {
   size_t mem_size;
   elf_get_tls_template(elf_obj->dynnacl_obj, &tls_template,
                        &file_size, &mem_size);
-  elf_obj->tls_base = next_tls;
-  next_tls += mem_size;
+  elf_obj->tls_base_offset = tls_allocate_static_tls(mem_size);
+  char *base = tls_get_base() + elf_obj->tls_base_offset;
   /* Copy the TLS template.  This must happen only after relocations
      are applied. */
-  memcpy(elf_obj->tls_base, tls_template, file_size);
-  memset(elf_obj->tls_base + file_size, 0, mem_size - file_size);
+  memcpy(base, tls_template, file_size);
+  memset(base + file_size, 0, mem_size - file_size);
 }
 
 /* We need the regparm attribute for x86-32. */
@@ -50,7 +47,7 @@ static void *tls_get_addr(struct tls_index *info) {
   printf("tls_get_addr(%i: %i, %i) called\n", info, info->module, info->offset);
   struct elf_obj *elf_obj = info->module;
   allocate_tls(elf_obj);
-  return elf_obj->tls_base + info->offset;
+  return tls_get_base() + elf_obj->tls_base_offset + info->offset;
 }
 
 static unsigned long elf_hash(const uint8_t *name) {
@@ -193,7 +190,7 @@ int main() {
   elf_obj.dt_symtab = get_biased_dynamic_entry(dynnacl_obj, DT_SYMTAB);
   elf_obj.dt_strtab = get_biased_dynamic_entry(dynnacl_obj, DT_STRTAB);
   elf_obj.dt_hash = get_biased_dynamic_entry(dynnacl_obj, DT_HASH);
-  elf_obj.tls_base = NULL;
+  elf_obj.tls_base_offset = 0;
 
   dump_symbols(&elf_obj);
 
@@ -263,6 +260,10 @@ int main() {
       case R_DYNNACL_TLS_DTPOFF:
         *(uintptr_t *) dest = sym->st_value;
         break;
+      case R_DYNNACL_TLS_TPOFF:
+        allocate_tls(&elf_obj);
+        *(uintptr_t *) dest = elf_obj.tls_base_offset + sym->st_value;
+        break;
       default:
         assert(0);
         break;
@@ -279,6 +280,9 @@ int main() {
   /* Only the first of these two calls will allocate the TLS area. */
   assert(test_var_func() == 321);
   assert(test_var_func() == 321);
+
+  test_var_func = look_up_func(&elf_obj, "test_tls_var_ie");
+  assert(test_var_func() == 654);
 
   test2();
 

@@ -41,3 +41,9 @@ __thread int tls_var = 321;
 int test_tls_var() {
   return tls_var;
 }
+
+__attribute__((tls_model("initial-exec")))
+__thread int tls_var_ie = 654;
+int test_tls_var_ie() {
+  return tls_var_ie;
+}

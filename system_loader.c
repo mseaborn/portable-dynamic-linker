@@ -243,6 +243,8 @@ static int map_reloc_type(int reloc_type) {
       return R_DYNNACL_TLS_DTPOFF;
     case R_386_TLS_DTPMOD32:
       return R_DYNNACL_TLS_DTPMOD;
+    case R_386_TLS_TPOFF:
+      return R_DYNNACL_TLS_TPOFF;
 #elif defined(__x86_64__)
     case R_X86_64_GLOB_DAT:
     case R_X86_64_64:
@@ -251,6 +253,8 @@ static int map_reloc_type(int reloc_type) {
       return R_DYNNACL_TLS_DTPOFF;
     case R_X86_64_DTPMOD64:
       return R_DYNNACL_TLS_DTPMOD;
+    case R_X86_64_TPOFF64:
+      return R_DYNNACL_TLS_TPOFF;
 #endif
     default:
       return 0;
@@ -457,7 +461,7 @@ static struct dynnacl_obj *load_elf_file(const char *filename,
             reloc_new->r_symbol = ELFW_R_SYM(reloc->r_info);
           } else {
             printf("Unrecognised relocation type %i\n", reloc_type);
-            /* assert(0); */
+            assert(0);
           }
           break;
         }
